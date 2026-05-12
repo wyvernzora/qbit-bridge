@@ -23,6 +23,7 @@ These rules override everything else in this file when in conflict:
 4. **Stop when confused.** If the task has two plausible interpretations, ask. Do not pick silently and proceed.
 5. **Touch only what you must.** Every changed line must trace directly to the user's request. No drive-by refactors, reformatting, or "while I was in there" cleanups.
 6. **Do not silence failing tests.** You MUST determine the root cause of a failed test before changing the test. Do not modify tests merely to make them pass. Test changes are only allowed when the existing test is demonstrably incorrect, outdated, flaky, or no longer aligned with intended behavior.
+7. **Prefer established libraries over rolling your own.** Before writing a client, parser, or protocol implementation, search for an existing maintained library. Check: last-commit recency (under ~12 months), license compatibility, API coverage of what you actually need, presence of `context.Context` and tests, and which other projects depend on it. Roll your own only when you can articulate specific, significant reasons no available option fits — e.g. all candidates are abandoned, the only license-compatible option lacks half the API surface, or the dependency would inflate the binary disproportionately to the task. State the reasons in the PR or commit body. Vague preferences ("I'd rather control it", "wrapping it would be awkward") are not significant reasons.
 
 ---
 
