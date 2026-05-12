@@ -12,6 +12,8 @@ import (
 
 	qbt "github.com/autobrr/go-qbittorrent"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
 )
 
 const (
@@ -30,12 +32,16 @@ const (
 )
 
 // New constructs the MCP server with all qBittorrent tools registered.
-func New(client *qbt.Client, logger *slog.Logger, version string) *mcpsdk.Server {
+// resolver is consulted by every tool that takes a destination input
+// (add_download, update_downloads, set_rss_rule) so callers pick from a
+// deploy-time-configured list of named paths instead of supplying
+// arbitrary filesystem paths.
+func New(client *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger, version string) *mcpsdk.Server {
 	s := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Name:    serverName,
 		Version: version,
 	}, nil)
-	Register(s, client, logger)
+	Register(s, client, resolver, logger)
 	return s
 }
 

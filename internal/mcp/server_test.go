@@ -10,6 +10,8 @@ import (
 
 	qbt "github.com/autobrr/go-qbittorrent"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
 )
 
 func discardLogger() *slog.Logger {
@@ -25,7 +27,11 @@ func startTestSession(t *testing.T) (*mcpsdk.ClientSession, func()) { //nolint:g
 		Host:    "http://127.0.0.1:1", // unreachable; no tools call it yet
 		Timeout: 1,                    // seconds; autobrr-config field is int
 	})
-	server := New(client, discardLogger(), "test")
+	resolver, err := savepath.Parse("")
+	if err != nil {
+		t.Fatalf("savepath.Parse: %v", err)
+	}
+	server := New(client, resolver, discardLogger(), "test")
 
 	t1, t2 := mcpsdk.NewInMemoryTransports()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -43,25 +49,70 @@ func startTestSession(t *testing.T) (*mcpsdk.ClientSession, func()) { //nolint:g
 	return cs, cleanup
 }
 
-func TestListTools_EmptyScaffold(t *testing.T) {
+func TestListTools_All10Registered(t *testing.T) {
 	cs, cleanup := startTestSession(t)
 	defer cleanup()
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if len(res.Tools) != 0 {
-		names := make([]string, 0, len(res.Tools))
-		for _, tool := range res.Tools {
-			names = append(names, tool.Name)
+	want := map[string]bool{
+		// downloads (3)
+		"list_downloads":   false,
+		"add_download":     false,
+		"remove_downloads": false,
+		// tags (1)
+		"list_tags": false,
+		// rss (6)
+		"list_rss":        false,
+		"add_rss_feed":    false,
+		"remove_rss_item": false,
+		"list_rss_rules":  false,
+		"set_rss_rule":    false,
+		"delete_rss_rule": false,
+	}
+	for _, tool := range res.Tools {
+		if _, ok := want[tool.Name]; !ok {
+			t.Errorf("unexpected tool registered: %s", tool.Name)
+			continue
 		}
-		t.Errorf("expected zero tools in bootstrap scaffold, got %v", names)
+		want[tool.Name] = true
+		if tool.InputSchema == nil {
+			t.Errorf("%s: nil InputSchema", tool.Name)
+		}
+		if tool.Description == "" {
+			t.Errorf("%s: empty Description", tool.Name)
+		}
+	}
+	for name, seen := range want {
+		if !seen {
+			t.Errorf("missing tool: %s", name)
+		}
+	}
+	if len(res.Tools) != len(want) {
+		t.Errorf("tool count = %d, want %d", len(res.Tools), len(want))
+	}
+}
+
+func TestCallTool_StubReturnsNotImplemented(t *testing.T) {
+	cs, cleanup := startTestSession(t)
+	defer cleanup()
+	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name:      "list_downloads",
+		Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected stub handler to return IsError=true")
 	}
 }
 
 func TestHTTPTransport_Healthz(t *testing.T) {
 	client := qbt.NewClient(qbt.Config{Host: "http://127.0.0.1:1", Timeout: 1})
-	server := New(client, discardLogger(), "test")
+	resolver, _ := savepath.Parse("")
+	server := New(client, resolver, discardLogger(), "test")
 
 	mux := http.NewServeMux()
 	mcpHandler := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server { return server }, nil)

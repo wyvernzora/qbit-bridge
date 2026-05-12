@@ -1,6 +1,12 @@
 package mcp
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+
+	qbt "github.com/autobrr/go-qbittorrent"
+)
 
 // ErrCode is a stable string identifier the agent can branch on.
 type ErrCode string
@@ -35,4 +41,58 @@ func (e *ToolError) JSON() string {
 		return `{"code":"internal","message":"failed to marshal error","retriable":false}`
 	}
 	return string(b)
+}
+
+// errorFromSDK translates autobrr/go-qbittorrent SDK errors into *ToolError
+// with appropriate codes. Use from any handler that calls into qbt.Client.
+//
+// The SDK wraps non-2xx responses as qbt.ErrUnexpectedStatus without
+// preserving the numeric status code on the typed error, so 401 / 403
+// detection falls back to a string-match heuristic against the wrapped
+// message. Brittle if the SDK changes its error format upstream, but the
+// alternative is forking; revisit when autobrr exposes the status code
+// programmatically.
+func errorFromSDK(err error) *ToolError {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	switch {
+	case errors.Is(err, qbt.ErrBadCredentials),
+		errors.Is(err, qbt.ErrIPBanned),
+		strings.Contains(msg, "status code: 401"),
+		strings.Contains(msg, "status code: 403"),
+		// autobrr retries the request after a 401/403 by attempting a
+		// re-login. Each retry fails the same way and the final wrapped
+		// error contains "qbit re-login". This is the reliable surface for
+		// auth failure detection — the original 4xx status is not preserved
+		// on the typed error.
+		strings.Contains(msg, "qbit re-login"):
+		return &ToolError{
+			Code:      CodeUpstreamForbidden,
+			Message:   msg,
+			Retriable: false,
+		}
+	case errors.Is(err, qbt.ErrTorrentNotFound):
+		return &ToolError{
+			Code:      CodeUpstreamNotFound,
+			Message:   msg,
+			Retriable: false,
+		}
+	case errors.Is(err, qbt.ErrInvalidTorrentHash),
+		errors.Is(err, qbt.ErrEmptyTorrentName),
+		errors.Is(err, qbt.ErrInvalidPriority),
+		errors.Is(err, qbt.ErrInvalidURL):
+		return &ToolError{
+			Code:      CodeInvalidArgument,
+			Message:   msg,
+			Retriable: false,
+		}
+	default:
+		return &ToolError{
+			Code:      CodeUpstreamUnavailable,
+			Message:   msg,
+			Retriable: true,
+		}
+	}
 }

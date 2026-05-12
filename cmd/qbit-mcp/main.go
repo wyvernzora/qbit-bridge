@@ -20,6 +20,7 @@ import (
 	qbt "github.com/autobrr/go-qbittorrent"
 
 	mcppkg "github.com/wyvernzora/qbittorrent-mcp/internal/mcp"
+	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
 )
 
 // version is overridable at link time via -ldflags="-X main.version=...".
@@ -45,6 +46,7 @@ func run() error {
 		addr        = stringFlag("addr", "QBITTORRENT_ADDR", ":8080", "listen address (http transport only)")
 		qbURL       = stringFlag("qb-url", "QBITTORRENT_URL", defaultQbURL, "qBittorrent WebUI base URL (sidecar → loopback)")
 		qbTimeout   = durationFlag("qb-timeout", "QBITTORRENT_TIMEOUT", defaultTimeout, "per-request HTTP timeout against qBittorrent", &envWarnings)
+		savePaths   = stringFlag("save-paths", "QBITTORRENT_SAVE_PATHS", "", "comma-separated destination aliases, e.g. 'kura-inbox=/mnt/kura,downloads=/mnt/downloads'. callers reference destinations by alias name; arbitrary paths are rejected.")
 		logLevel    = stringFlag("log-level", "QBITTORRENT_LOG_LEVEL", "info", "log level: debug, info, warn, error")
 	)
 	flag.Parse()
@@ -69,6 +71,12 @@ func run() error {
 		)
 	}
 
+	resolver, err := savepath.Parse(*savePaths)
+	if err != nil {
+		return fmt.Errorf("--save-paths: %w", err)
+	}
+	logger.Info("destinations configured", "names", resolver.Names())
+
 	// autobrr/go-qbittorrent.Config.Timeout is seconds-as-int. Round up so
 	// sub-second values still get at least one second of headroom.
 	timeoutSec := int((*qbTimeout + time.Second - 1) / time.Second)
@@ -85,7 +93,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	server := mcppkg.New(client, logger, version)
+	server := mcppkg.New(client, resolver, logger, version)
 
 	switch *transport {
 	case "stdio":
