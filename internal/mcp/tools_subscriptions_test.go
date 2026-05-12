@@ -54,21 +54,21 @@ func rssRulesBody(ruleName, feedPath, savePath, lastMatch string, tags []string)
 	)
 }
 
-func callListSubscriptions(t *testing.T, client *qbt.Client, in ListSubscriptionsInput) (ListSubscriptionsOutput, *ToolError) {
+func callSearchSubscriptions(t *testing.T, client *qbt.Client, in SearchSubscriptionsInput) (SearchSubscriptionsOutput, *ToolError) {
 	t.Helper()
-	h := listSubscriptionsHandler(client, mustResolver(t, "kura-inbox=/mnt/kura"))
+	h := searchSubscriptionsHandler(client, mustResolver(t, "kura-inbox=/mnt/kura"))
 	return h(context.Background(), in)
 }
 
-func callSetSubscription(t *testing.T, client *qbt.Client, in SetSubscriptionInput) (OkOutput, *ToolError) {
+func callSubscribe(t *testing.T, client *qbt.Client, in SubscribeInput) (OkOutput, *ToolError) {
 	t.Helper()
-	h := setSubscriptionHandler(client, mustResolver(t, "kura-inbox=/mnt/kura"), discardLogger())
+	h := subscribeHandler(client, mustResolver(t, "kura-inbox=/mnt/kura"), discardLogger())
 	return h(context.Background(), in)
 }
 
-func callDeleteSubscription(t *testing.T, client *qbt.Client, in DeleteSubscriptionInput) (OkOutput, *ToolError) {
+func callUnsubscribe(t *testing.T, client *qbt.Client, in UnsubscribeInput) (OkOutput, *ToolError) {
 	t.Helper()
-	h := deleteSubscriptionHandler(client, discardLogger())
+	h := unsubscribeHandler(client, discardLogger())
 	return h(context.Background(), in)
 }
 
@@ -99,15 +99,15 @@ func TestFeedPathForURL_DifferentURLsDifferentPaths(t *testing.T) {
 	}
 }
 
-// --- list_subscriptions ---
+// --- qbit_search_subscriptions ---
 
-func TestListSubscriptions_ManagedRuleProjected(t *testing.T) {
+func TestSearchSubscriptions_ManagedRuleProjected(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/rss/rules": {body: rssRulesBody("kura-show", feedPath, "/mnt/kura", "2026-05-10T18:24:00", []string{"tvdb:12345"})},
 		"/api/v2/rss/items": {body: rssItemsBody(feedPath, testFeedURL, nil)},
 	})
-	out, terr := callListSubscriptions(t, client, ListSubscriptionsInput{})
+	out, terr := callSearchSubscriptions(t, client, SearchSubscriptionsInput{})
 	if terr != nil {
 		t.Fatalf("err = %+v", terr)
 	}
@@ -138,7 +138,7 @@ func TestListSubscriptions_ManagedRuleProjected(t *testing.T) {
 	}
 }
 
-func TestListSubscriptions_UnmanagedRulesFilteredOut(t *testing.T) {
+func TestSearchSubscriptions_UnmanagedRulesFilteredOut(t *testing.T) {
 	// One managed rule + one rule that targets a feed outside our prefix.
 	// Only the managed one should surface.
 	managedPath := feedHashForTest(t, testFeedURL)
@@ -150,7 +150,7 @@ func TestListSubscriptions_UnmanagedRulesFilteredOut(t *testing.T) {
 		"/api/v2/rss/rules": {body: rules},
 		"/api/v2/rss/items": {body: rssItemsBody(managedPath, testFeedURL, nil)},
 	})
-	out, terr := callListSubscriptions(t, client, ListSubscriptionsInput{})
+	out, terr := callSearchSubscriptions(t, client, SearchSubscriptionsInput{})
 	if terr != nil {
 		t.Fatalf("err = %+v", terr)
 	}
@@ -159,7 +159,7 @@ func TestListSubscriptions_UnmanagedRulesFilteredOut(t *testing.T) {
 	}
 }
 
-func TestListSubscriptions_IncludeRecentItemsEmbedsArticles(t *testing.T) {
+func TestSearchSubscriptions_IncludeRecentItemsEmbedsArticles(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	articles := []map[string]string{
 		{"id": "a1", "title": "Ep 03", "date": "2026-05-10T18:24:00Z", "torrentURL": "magnet:?xt=urn:btih:abc"},
@@ -169,7 +169,7 @@ func TestListSubscriptions_IncludeRecentItemsEmbedsArticles(t *testing.T) {
 		"/api/v2/rss/rules": {body: rssRulesBody("kura-show", feedPath, "/mnt/kura", "", nil)},
 		"/api/v2/rss/items": {body: rssItemsBody(feedPath, testFeedURL, articles)},
 	})
-	out, terr := callListSubscriptions(t, client, ListSubscriptionsInput{IncludeRecentItems: true})
+	out, terr := callSearchSubscriptions(t, client, SearchSubscriptionsInput{IncludeRecentItems: true})
 	if terr != nil {
 		t.Fatalf("err = %+v", terr)
 	}
@@ -185,7 +185,7 @@ func TestListSubscriptions_IncludeRecentItemsEmbedsArticles(t *testing.T) {
 	}
 }
 
-func TestListSubscriptions_SinceFiltersOlderArticles(t *testing.T) {
+func TestSearchSubscriptions_SinceFiltersOlderArticles(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	articles := []map[string]string{
 		{"id": "new", "title": "new", "date": "2026-05-10T18:24:00Z", "torrentURL": "magnet:new"},
@@ -195,7 +195,7 @@ func TestListSubscriptions_SinceFiltersOlderArticles(t *testing.T) {
 		"/api/v2/rss/rules": {body: rssRulesBody("kura-show", feedPath, "", "", nil)},
 		"/api/v2/rss/items": {body: rssItemsBody(feedPath, testFeedURL, articles)},
 	})
-	out, _ := callListSubscriptions(t, client, ListSubscriptionsInput{
+	out, _ := callSearchSubscriptions(t, client, SearchSubscriptionsInput{
 		IncludeRecentItems: true,
 		Since:              "2026-05-01T00:00:00Z",
 	})
@@ -205,21 +205,21 @@ func TestListSubscriptions_SinceFiltersOlderArticles(t *testing.T) {
 	}
 }
 
-func TestListSubscriptions_InvalidSinceRejected(t *testing.T) {
+func TestSearchSubscriptions_InvalidSinceRejected(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/rss/rules": {body: rssRulesBody("k", feedPath, "", "", nil)},
 		"/api/v2/rss/items": {body: rssItemsBody(feedPath, testFeedURL, nil)},
 	})
-	_, terr := callListSubscriptions(t, client, ListSubscriptionsInput{Since: "not-a-date"})
+	_, terr := callSearchSubscriptions(t, client, SearchSubscriptionsInput{Since: "not-a-date"})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Errorf("err = %+v, want invalid_argument", terr)
 	}
 }
 
-func TestListSubscriptions_Upstream500(t *testing.T) {
+func TestSearchSubscriptions_Upstream500(t *testing.T) {
 	client := newQbitMockStatus(t, http.StatusInternalServerError)
-	_, terr := callListSubscriptions(t, client, ListSubscriptionsInput{})
+	_, terr := callSearchSubscriptions(t, client, SearchSubscriptionsInput{})
 	if terr == nil || terr.Code != CodeUpstreamUnavailable {
 		t.Errorf("err = %+v, want upstream_unavailable", terr)
 	}
@@ -227,7 +227,7 @@ func TestListSubscriptions_Upstream500(t *testing.T) {
 
 // --- set_subscription ---
 
-func TestSetSubscription_CreatesFeedAndRule(t *testing.T) {
+func TestSubscribe_CreatesFeedAndRule(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/rss/rules":   {body: "{}"},
@@ -235,7 +235,7 @@ func TestSetSubscription_CreatesFeedAndRule(t *testing.T) {
 		"/api/v2/rss/addFeed": {body: ""},
 		"/api/v2/rss/setRule": {body: ""},
 	})
-	out, terr := callSetSubscription(t, client, SetSubscriptionInput{
+	out, terr := callSubscribe(t, client, SubscribeInput{
 		Name:        "kura-show",
 		FeedURL:     testFeedURL,
 		Destination: "kura-inbox",
@@ -268,7 +268,7 @@ func TestSetSubscription_CreatesFeedAndRule(t *testing.T) {
 	}
 }
 
-func TestSetSubscription_SkipsAddFeedWhenFeedExists(t *testing.T) {
+func TestSubscribe_SkipsAddFeedWhenFeedExists(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/rss/rules":   {body: "{}"},
@@ -276,7 +276,7 @@ func TestSetSubscription_SkipsAddFeedWhenFeedExists(t *testing.T) {
 		"/api/v2/rss/addFeed": {body: ""},
 		"/api/v2/rss/setRule": {body: ""},
 	})
-	_, terr := callSetSubscription(t, client, SetSubscriptionInput{
+	_, terr := callSubscribe(t, client, SubscribeInput{
 		Name:    "other-show",
 		FeedURL: testFeedURL,
 		Tags:    []string{},
@@ -289,7 +289,7 @@ func TestSetSubscription_SkipsAddFeedWhenFeedExists(t *testing.T) {
 	}
 }
 
-func TestSetSubscription_RejectsFeedURLChangeOnExisting(t *testing.T) {
+func TestSubscribe_RejectsFeedURLChangeOnExisting(t *testing.T) {
 	priorFeedPath := feedHashForTest(t, "https://example.com/old.xml")
 	rules := fmt.Sprintf(`{"kura-show":{"enabled":true,"affectedFeeds":[%q],"torrentParams":{"tags":[]}}}`, priorFeedPath)
 	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
@@ -298,7 +298,7 @@ func TestSetSubscription_RejectsFeedURLChangeOnExisting(t *testing.T) {
 		"/api/v2/rss/addFeed": {body: ""},
 		"/api/v2/rss/setRule": {body: ""},
 	})
-	_, terr := callSetSubscription(t, client, SetSubscriptionInput{
+	_, terr := callSubscribe(t, client, SubscribeInput{
 		Name:    "kura-show",
 		FeedURL: testFeedURL,
 		Tags:    []string{},
@@ -314,8 +314,8 @@ func TestSetSubscription_RejectsFeedURLChangeOnExisting(t *testing.T) {
 	}
 }
 
-func TestSetSubscription_TagsRequired(t *testing.T) {
-	_, terr := callSetSubscription(t, nil, SetSubscriptionInput{
+func TestSubscribe_TagsRequired(t *testing.T) {
+	_, terr := callSubscribe(t, nil, SubscribeInput{
 		Name:    "kura-show",
 		FeedURL: testFeedURL,
 		Tags:    nil,
@@ -325,8 +325,8 @@ func TestSetSubscription_TagsRequired(t *testing.T) {
 	}
 }
 
-func TestSetSubscription_TagWithCommaRejected(t *testing.T) {
-	_, terr := callSetSubscription(t, nil, SetSubscriptionInput{
+func TestSubscribe_TagWithCommaRejected(t *testing.T) {
+	_, terr := callSubscribe(t, nil, SubscribeInput{
 		Name:    "kura-show",
 		FeedURL: testFeedURL,
 		Tags:    []string{"bad,tag"},
@@ -336,8 +336,8 @@ func TestSetSubscription_TagWithCommaRejected(t *testing.T) {
 	}
 }
 
-func TestSetSubscription_EmptyNameRejected(t *testing.T) {
-	_, terr := callSetSubscription(t, nil, SetSubscriptionInput{
+func TestSubscribe_EmptyNameRejected(t *testing.T) {
+	_, terr := callSubscribe(t, nil, SubscribeInput{
 		Name:    "",
 		FeedURL: testFeedURL,
 		Tags:    []string{},
@@ -347,7 +347,7 @@ func TestSetSubscription_EmptyNameRejected(t *testing.T) {
 	}
 }
 
-func TestSetSubscription_UnknownDestinationRejected(t *testing.T) {
+func TestSubscribe_UnknownDestinationRejected(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/rss/rules":   {body: "{}"},
@@ -355,7 +355,7 @@ func TestSetSubscription_UnknownDestinationRejected(t *testing.T) {
 		"/api/v2/rss/addFeed": {body: ""},
 		"/api/v2/rss/setRule": {body: ""},
 	})
-	_, terr := callSetSubscription(t, client, SetSubscriptionInput{
+	_, terr := callSubscribe(t, client, SubscribeInput{
 		Name:        "kura-show",
 		FeedURL:     testFeedURL,
 		Destination: "bogus",
@@ -371,14 +371,14 @@ func TestSetSubscription_UnknownDestinationRejected(t *testing.T) {
 
 // --- delete_subscription ---
 
-func TestDeleteSubscription_RemovesRuleAndOrphanFeed(t *testing.T) {
+func TestUnsubscribe_RemovesRuleAndOrphanFeed(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/rss/rules":      {body: rssRulesBody("kura-show", feedPath, "", "", nil)},
 		"/api/v2/rss/removeRule": {body: ""},
 		"/api/v2/rss/removeItem": {body: ""},
 	})
-	out, terr := callDeleteSubscription(t, client, DeleteSubscriptionInput{Name: "kura-show"})
+	out, terr := callUnsubscribe(t, client, UnsubscribeInput{Name: "kura-show"})
 	if terr != nil {
 		t.Fatalf("err = %+v", terr)
 	}
@@ -394,7 +394,7 @@ func TestDeleteSubscription_RemovesRuleAndOrphanFeed(t *testing.T) {
 	}
 }
 
-func TestDeleteSubscription_KeepsFeedWhenStillReferenced(t *testing.T) {
+func TestUnsubscribe_KeepsFeedWhenStillReferenced(t *testing.T) {
 	feedPath := feedHashForTest(t, testFeedURL)
 	// Two rules share the same feed path; deleting "kura-show" must
 	// keep the feed since "other-show" still references it.
@@ -407,7 +407,7 @@ func TestDeleteSubscription_KeepsFeedWhenStillReferenced(t *testing.T) {
 		"/api/v2/rss/removeRule": {body: ""},
 		"/api/v2/rss/removeItem": {body: ""},
 	})
-	_, terr := callDeleteSubscription(t, client, DeleteSubscriptionInput{Name: "kura-show"})
+	_, terr := callUnsubscribe(t, client, UnsubscribeInput{Name: "kura-show"})
 	if terr != nil {
 		t.Fatalf("err = %+v", terr)
 	}
@@ -416,31 +416,120 @@ func TestDeleteSubscription_KeepsFeedWhenStillReferenced(t *testing.T) {
 	}
 }
 
-func TestDeleteSubscription_UnknownNameReturnsNotFound(t *testing.T) {
+func TestUnsubscribe_UnknownNameReturnsNotFound(t *testing.T) {
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/rss/rules": {body: "{}"},
 	})
-	_, terr := callDeleteSubscription(t, client, DeleteSubscriptionInput{Name: "missing"})
+	_, terr := callUnsubscribe(t, client, UnsubscribeInput{Name: "missing"})
 	if terr == nil || terr.Code != CodeUpstreamNotFound {
 		t.Errorf("err = %+v, want upstream_not_found", terr)
 	}
 }
 
-func TestDeleteSubscription_UnmanagedRuleReturnsNotFound(t *testing.T) {
+func TestUnsubscribe_UnmanagedRuleReturnsNotFound(t *testing.T) {
 	// Rule exists in qBittorrent but does not target our synthetic
 	// feed-path prefix. Our surface treats it as not-found.
 	rules := `{"manual":{"enabled":true,"affectedFeeds":["Anime\\Other"],"torrentParams":{"tags":[]}}}`
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/rss/rules": {body: rules},
 	})
-	_, terr := callDeleteSubscription(t, client, DeleteSubscriptionInput{Name: "manual"})
+	_, terr := callUnsubscribe(t, client, UnsubscribeInput{Name: "manual"})
 	if terr == nil || terr.Code != CodeUpstreamNotFound {
 		t.Errorf("err = %+v, want upstream_not_found", terr)
 	}
 }
 
-func TestDeleteSubscription_EmptyNameRejected(t *testing.T) {
-	_, terr := callDeleteSubscription(t, nil, DeleteSubscriptionInput{Name: ""})
+func TestUnsubscribe_EmptyNameRejected(t *testing.T) {
+	_, terr := callUnsubscribe(t, nil, UnsubscribeInput{Name: ""})
+	if terr == nil || terr.Code != CodeInvalidArgument {
+		t.Errorf("err = %+v, want invalid_argument", terr)
+	}
+}
+
+// --- qbit_search_subscriptions: filter + pagination ---
+
+func TestSearchSubscriptions_NameGlobFilters(t *testing.T) {
+	urlA, urlB := "https://example.com/a.xml", "https://example.com/b.xml"
+	pathA := feedHashForTest(t, urlA)
+	pathB := feedHashForTest(t, urlB)
+	rules := fmt.Sprintf(
+		`{"kura-show":{"enabled":true,"affectedFeeds":[%q],"torrentParams":{"tags":[]}},"other-feed":{"enabled":true,"affectedFeeds":[%q],"torrentParams":{"tags":[]}}}`,
+		pathA, pathB,
+	)
+	items := fmt.Sprintf(`{%q:{"uid":"u","url":%q,"articles":[]},%q:{"uid":"u","url":%q,"articles":[]}}`,
+		pathA, urlA, pathB, urlB)
+	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/rss/rules": {body: rules},
+		"/api/v2/rss/items": {body: items},
+	})
+	out, terr := callSearchSubscriptions(t, client, SearchSubscriptionsInput{NameGlob: "kura-*"})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	if len(out.Subscriptions) != 1 || out.Subscriptions[0].Name != "kura-show" {
+		t.Errorf("subscriptions = %+v, want only 'kura-show'", out.Subscriptions)
+	}
+}
+
+func TestSearchSubscriptions_FeedURLSubstringFilters(t *testing.T) {
+	urlA, urlB := "https://dmhy.example/a", "https://other.example/b"
+	pathA := feedHashForTest(t, urlA)
+	pathB := feedHashForTest(t, urlB)
+	rules := fmt.Sprintf(
+		`{"a":{"enabled":true,"affectedFeeds":[%q],"torrentParams":{"tags":[]}},"b":{"enabled":true,"affectedFeeds":[%q],"torrentParams":{"tags":[]}}}`,
+		pathA, pathB,
+	)
+	items := fmt.Sprintf(`{%q:{"uid":"u","url":%q,"articles":[]},%q:{"uid":"u","url":%q,"articles":[]}}`,
+		pathA, urlA, pathB, urlB)
+	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/rss/rules": {body: rules},
+		"/api/v2/rss/items": {body: items},
+	})
+	out, _ := callSearchSubscriptions(t, client, SearchSubscriptionsInput{FeedURLSubstring: "dmhy"})
+	if len(out.Subscriptions) != 1 || out.Subscriptions[0].Name != "a" {
+		t.Errorf("subscriptions = %+v, want only 'a' (dmhy feed)", out.Subscriptions)
+	}
+}
+
+func TestSearchSubscriptions_LimitAndOffsetPaginate(t *testing.T) {
+	// Three subscriptions, request limit=1 offset=1 — expect the middle
+	// entry only and has_more=true.
+	var feedPaths [3]string
+	urls := [3]string{"https://example.com/0", "https://example.com/1", "https://example.com/2"}
+	for i, u := range urls {
+		feedPaths[i] = feedHashForTest(t, u)
+	}
+	rules := fmt.Sprintf(
+		`{"a":{"enabled":true,"affectedFeeds":[%q],"torrentParams":{"tags":[]}},"b":{"enabled":true,"affectedFeeds":[%q],"torrentParams":{"tags":[]}},"c":{"enabled":true,"affectedFeeds":[%q],"torrentParams":{"tags":[]}}}`,
+		feedPaths[0], feedPaths[1], feedPaths[2],
+	)
+	items := fmt.Sprintf(
+		`{%q:{"uid":"u","url":%q,"articles":[]},%q:{"uid":"u","url":%q,"articles":[]},%q:{"uid":"u","url":%q,"articles":[]}}`,
+		feedPaths[0], urls[0], feedPaths[1], urls[1], feedPaths[2], urls[2],
+	)
+	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/rss/rules": {body: rules},
+		"/api/v2/rss/items": {body: items},
+	})
+	out, _ := callSearchSubscriptions(t, client, SearchSubscriptionsInput{Limit: 1, Offset: 1})
+	if out.Count != 1 {
+		t.Errorf("count = %d, want 1", out.Count)
+	}
+	if !out.HasMore {
+		t.Error("has_more should be true (one entry remains past the page)")
+	}
+	if len(out.Subscriptions) != 1 || out.Subscriptions[0].Name != "b" {
+		t.Errorf("subscriptions = %+v, want only 'b' (offset=1)", out.Subscriptions)
+	}
+}
+
+func TestSearchSubscriptions_InvalidNameGlobRejected(t *testing.T) {
+	feedPath := feedHashForTest(t, testFeedURL)
+	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/rss/rules": {body: rssRulesBody("k", feedPath, "", "", nil)},
+		"/api/v2/rss/items": {body: rssItemsBody(feedPath, testFeedURL, nil)},
+	})
+	_, terr := callSearchSubscriptions(t, client, SearchSubscriptionsInput{NameGlob: "[unterminated"})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Errorf("err = %+v, want invalid_argument", terr)
 	}

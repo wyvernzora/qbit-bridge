@@ -8,20 +8,22 @@ Designed to run as a sidecar to the qBittorrent container, reaching the daemon o
 
 Eight tools across four groups (see [`docs/tools.md`](docs/tools.md) for the full schema spec).
 
+All tools carry the `qbit_` prefix so generic verbs don't collide with other MCP servers in the same agent session.
+
 | Group | Tool | What |
 | --- | --- | --- |
-| Downloads | `list_downloads` | Filtered/sorted/paginated download list with opt-in field projection (incl. per-hash `trackers` / `files`). |
-| Downloads | `add_download` | Magnet-only add. Idempotent — re-adding a hash already known to qBittorrent leaves the live download untouched and reports `already_existed: true`. |
-| Downloads | `remove_downloads` | Bulk remove by explicit `hashes` or by `filter` (states/tags). On-disk files are never deleted by this tool. |
-| Tags | `list_tags` | List the configured tags. Unknown tags auto-create on `add_download.tags`. |
-| Destinations | `list_destinations` | List the deploy-time-configured save-path aliases (name → absolute path). Useful for reverse-lookups from a raw `save_path` to an alias name. |
-| Subscriptions | `list_subscriptions` | RSS-feed-plus-rule joined as a single concept. Summary by default; opt-in `recent_items`. |
-| Subscriptions | `set_subscription` | Atomic upsert of a subscription. Creates (or replaces) the feed and the auto-download rule pointing at it. `feed_url` is immutable on existing subscriptions. |
-| Subscriptions | `delete_subscription` | Removes the rule; removes the synthetic feed too when no other subscription still references the same `feed_url`. |
+| Downloads | `qbit_search_downloads` | Filtered/sorted/paginated download list with opt-in field projection (incl. per-hash `trackers` / `files`). |
+| Downloads | `qbit_add_download` | Magnet-only add. Idempotent — re-adding a hash already known to qBittorrent leaves the live download untouched and reports `already_existed: true`. |
+| Downloads | `qbit_remove_downloads` | Bulk remove by explicit `hashes` or by `filter` (states/tags). On-disk files are never deleted by this tool. |
+| Tags | `qbit_list_tags` | List the configured tags. Unknown tags auto-create on `qbit_add_download.tags`. |
+| Destinations | `qbit_list_destinations` | List the deploy-time-configured save-path aliases (name → absolute path). Useful for reverse-lookups from a raw `save_path` to an alias name. |
+| Subscriptions | `qbit_search_subscriptions` | RSS-feed-plus-rule joined as a single concept. Summary by default; opt-in `recent_items`. Filter by `name_glob`/`feed_url_substring`, paginate via `limit`/`offset`. |
+| Subscriptions | `qbit_subscribe` | Create or replace a subscription by name. Atomically creates (or replaces) the feed and the auto-download rule pointing at it. `feed_url` is immutable on existing subscriptions. |
+| Subscriptions | `qbit_unsubscribe` | Removes the rule; removes the synthetic feed too when no other subscription still references the same `feed_url`. |
 
 ### Destination aliases
 
-Tools that direct download storage (`add_download`, `set_subscription`) **do not accept arbitrary filesystem paths**. The operator declares aliases at boot via `--save-paths` (or `QBITTORRENT_SAVE_PATHS`):
+Tools that direct download storage (`qbit_add_download`, `qbit_subscribe`) **do not accept arbitrary filesystem paths**. The operator declares aliases at boot via `--save-paths` (or `QBITTORRENT_SAVE_PATHS`):
 
 ```
 --save-paths='kura-inbox=/mnt/kura,downloads=/mnt/downloads'
@@ -31,7 +33,7 @@ Callers pass alias names; the server resolves to a path before calling qBittorre
 
 ### Audit logging
 
-Every mutation (`add`, `remove`, `subscription_set`, `subscription_delete`) emits a structured slog record with `audit=true`, the affected hashes/names, and tool-specific extras. Destructive ops (`remove`, `subscription_delete`) log at WARN so log aggregators filtering on level surface them.
+Every mutation (`add`, `remove`, `subscribe`, `unsubscribe`) emits a structured slog record with `audit=true`, the affected hashes/names, and tool-specific extras. Destructive ops (`remove`, `unsubscribe`) log at WARN so log aggregators filtering on level surface them.
 
 ## Build & run
 

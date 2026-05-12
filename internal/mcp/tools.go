@@ -68,36 +68,39 @@ func errorResult(te *ToolError) *mcpsdk.CallToolResult {
 	}
 }
 
-// readOnlyAnnotations is the ToolAnnotations preset used by every read-only
-// tool (list_*, get_*). qBittorrent state is external to the MCP server so
-// OpenWorldHint is always true; the read tools are idempotent and never
-// mutate.
+// readOnlyAnnotations is the ToolAnnotations preset used by every
+// read-only tool (qbit_search_*, qbit_list_*). qBittorrent is the
+// operator's own instance — closed-world per the MCP spec's example
+// framing (your-DB rather than open-internet). Reads are idempotent and
+// never mutate.
 //
 //nolint:unused // referenced by the per-domain registrars in tools_*.go
 func readOnlyAnnotations() *mcpsdk.ToolAnnotations {
-	yes, no := true, false
+	no := false
 	return &mcpsdk.ToolAnnotations{
 		ReadOnlyHint:    true,
 		DestructiveHint: &no,
 		IdempotentHint:  true,
-		OpenWorldHint:   &yes,
+		OpenWorldHint:   &no,
 	}
 }
 
-// mutatingAnnotations is the preset for tools that mutate qBittorrent state
-// (add_*, remove_*, set_subscription, …). DestructiveHint is true only on the
-// actually-destructive ops (remove_*); the rest are non-destructive
-// mutations.
+// mutatingAnnotations is the preset for tools that mutate qBittorrent
+// state (qbit_add_download, qbit_remove_downloads, qbit_subscribe,
+// qbit_unsubscribe). DestructiveHint is true only on the
+// actually-destructive ops (remove, unsubscribe); the rest are
+// non-destructive mutations. OpenWorldHint is false for the same reason
+// as the read-only preset — qBittorrent is the operator's own instance.
 //
 //nolint:unused // referenced by the per-domain registrars in tools_*.go
 func mutatingAnnotations(destructive bool) *mcpsdk.ToolAnnotations {
-	yes := true
+	no := false
 	d := destructive
 	return &mcpsdk.ToolAnnotations{
 		ReadOnlyHint:    false,
 		DestructiveHint: &d,
 		IdempotentHint:  false,
-		OpenWorldHint:   &yes,
+		OpenWorldHint:   &no,
 	}
 }
 

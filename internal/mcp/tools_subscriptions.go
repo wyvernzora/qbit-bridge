@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -31,27 +32,27 @@ func registerSubscriptions(s *mcpsdk.Server, client *qbt.Client, resolver *savep
 
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
-			Name:        "list_subscriptions",
-			Description: "List subscriptions. Each row carries the feed URL, the rule's filter fields (must_contain, episode_filter, ...), the destination alias the rule routes matched downloads to, the tags applied at creation, and a last_match_date summary. Set include_recent_items=true to also embed the most-recent feed items (capped by recent_items_limit, default 10, max 50).",
+			Name:        "qbit_search_subscriptions",
+			Description: "Search subscriptions with optional name/feed_url filters and pagination. Each row carries the feed URL, the rule's filter fields (must_contain, episode_filter, ...), the destination alias the rule routes matched downloads to, the tags applied at creation, and a last_match_date summary. Set include_recent_items=true to embed the most-recent feed items (capped by recent_items_limit, default 10, max 50). Default limit 50, max 200; paginate via offset.",
 			Annotations: readOnlyAnnotations(),
 		},
-		wrap("list_subscriptions", logger, listSubscriptionsHandler(client, resolver)),
+		wrap("qbit_search_subscriptions", logger, searchSubscriptionsHandler(client, resolver)),
 	)
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
-			Name:        "set_subscription",
-			Description: "Upsert a subscription by name. Atomically creates (or replaces) the qBittorrent feed and the auto-download rule pointing at it. The feed_url is the only feed-side input; qbit-mcp derives a synthetic feed path 'qbit-mcp-<hash>' so duplicate feed_urls across subscriptions share storage transparently. Changing feed_url on an existing subscription is rejected — delete and re-create instead. tags is required on every call; passing a different tags array on replace re-tags FUTURE auto-added downloads only (existing matches keep their original tags — retroactive retag is out of scope). " + destHint,
+			Name:        "qbit_subscribe",
+			Description: "Create or replace a subscription by name. Atomically creates (or replaces) the qBittorrent feed and the auto-download rule pointing at it. The feed_url is the only feed-side input; qbit-mcp derives a synthetic feed path 'qbit-mcp-<hash>' so duplicate feed_urls across subscriptions share storage transparently. Changing feed_url on an existing subscription is rejected — unsubscribe and resubscribe instead. tags is required on every call; passing a different tags array on replace re-tags FUTURE auto-added downloads only (existing matches keep their original tags — retroactive retag is out of scope). " + destHint,
 			Annotations: mutatingAnnotations(false),
 		},
-		wrap("set_subscription", logger, setSubscriptionHandler(client, resolver, logger)),
+		wrap("qbit_subscribe", logger, subscribeHandler(client, resolver, logger)),
 	)
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
-			Name:        "delete_subscription",
-			Description: "Delete a subscription by name. Removes the auto-download rule; the underlying feed is removed too unless another subscription still references the same feed_url.",
+			Name:        "qbit_unsubscribe",
+			Description: "Unsubscribe by name. Removes the auto-download rule; the underlying feed is removed too unless another subscription still references the same feed_url.",
 			Annotations: mutatingAnnotations(true),
 		},
-		wrap("delete_subscription", logger, deleteSubscriptionHandler(client, logger)),
+		wrap("qbit_unsubscribe", logger, unsubscribeHandler(client, logger)),
 	)
 }
 
@@ -81,9 +82,13 @@ func feedPathForURL(url string) string {
 	return feedPathPrefix + hex.EncodeToString(sum[:])[:16]
 }
 
-// --- list_subscriptions ---
+// --- qbit_search_subscriptions ---
 
-type ListSubscriptionsInput struct {
+type SearchSubscriptionsInput struct {
+	NameGlob           string `json:"name_glob,omitempty" jsonschema:"optional shell-style glob (path.Match) on subscription name; '*', '?', '[abc]' supported. plain strings match exactly."`
+	FeedURLSubstring   string `json:"feed_url_substring,omitempty" jsonschema:"optional case-sensitive substring filter on feed_url."`
+	Limit              int    `json:"limit,omitempty" jsonschema:"max subscriptions to return; default 50, max 200."`
+	Offset             int    `json:"offset,omitempty" jsonschema:"page offset; default 0."`
 	IncludeRecentItems bool   `json:"include_recent_items,omitempty" jsonschema:"embed each subscription's most-recent feed items. default false because feeds can carry hundreds of entries."`
 	RecentItemsLimit   int    `json:"recent_items_limit,omitempty" jsonschema:"max items per subscription when include_recent_items=true. default 10, max 50."`
 	Since              string `json:"since,omitempty" jsonschema:"RFC3339 timestamp; with include_recent_items=true, only items with pub_date >= since are returned."`
@@ -114,29 +119,31 @@ type Subscription struct {
 	RecentItems    []SubscriptionItem `json:"recent_items,omitempty"`
 }
 
-type ListSubscriptionsOutput struct {
+type SearchSubscriptionsOutput struct {
+	Count         int            `json:"count"`
+	HasMore       bool           `json:"has_more"`
 	Subscriptions []Subscription `json:"subscriptions"`
 }
 
-func listSubscriptionsHandler(client *qbt.Client, resolver *savepath.Resolver) internalHandler[ListSubscriptionsInput, ListSubscriptionsOutput] {
-	return func(ctx context.Context, in ListSubscriptionsInput) (ListSubscriptionsOutput, *ToolError) {
-		empty := ListSubscriptionsOutput{Subscriptions: []Subscription{}}
+// searchSubscriptionsRequest is the validated, ready-to-execute form of
+// a SearchSubscriptionsInput. prepareSearchSubscriptions produces it
+// after every validation rule, keeping the handler body thin (and
+// inside the cyclop budget).
+type searchSubscriptionsRequest struct {
+	in          SearchSubscriptionsInput
+	pageLimit   int
+	pageOffset  int
+	recentLimit int
+	sinceCutoff time.Time
+}
 
-		limit, terr := normalizeRecentItemsLimit(in.RecentItemsLimit)
+func searchSubscriptionsHandler(client *qbt.Client, resolver *savepath.Resolver) internalHandler[SearchSubscriptionsInput, SearchSubscriptionsOutput] {
+	return func(ctx context.Context, in SearchSubscriptionsInput) (SearchSubscriptionsOutput, *ToolError) {
+		empty := SearchSubscriptionsOutput{Subscriptions: []Subscription{}}
+
+		req, terr := prepareSearchSubscriptions(in)
 		if terr != nil {
 			return empty, terr
-		}
-		var sinceCutoff time.Time
-		if in.Since != "" {
-			t, err := time.Parse(time.RFC3339, in.Since)
-			if err != nil {
-				return empty, &ToolError{
-					Code:      CodeInvalidArgument,
-					Message:   "since must be RFC3339: " + err.Error(),
-					Retriable: false,
-				}
-			}
-			sinceCutoff = t
 		}
 
 		rules, err := client.GetRSSRulesCtx(ctx)
@@ -152,27 +159,121 @@ func listSubscriptionsHandler(client *qbt.Client, resolver *savepath.Resolver) i
 			return empty, errorFromSDK(err)
 		}
 
-		out := ListSubscriptionsOutput{Subscriptions: []Subscription{}}
-		names := make([]string, 0, len(rules))
-		for name := range rules {
-			names = append(names, name)
+		filtered := projectAndFilterSubscriptions(rules, items, req, resolver)
+		page, hasMore := paginateSubscriptions(filtered, req.pageOffset, req.pageLimit)
+		return SearchSubscriptionsOutput{
+			Count:         len(page),
+			HasMore:       hasMore,
+			Subscriptions: page,
+		}, nil
+	}
+}
+
+// prepareSearchSubscriptions validates input and normalizes the
+// derived defaults (pageLimit/Offset, recentLimit, sinceCutoff).
+// Catches name_glob syntax errors and malformed since timestamps up
+// front so callers see invalid_argument rather than silent zero-result
+// pages.
+func prepareSearchSubscriptions(in SearchSubscriptionsInput) (searchSubscriptionsRequest, *ToolError) {
+	if in.NameGlob != "" {
+		if _, err := path.Match(in.NameGlob, ""); err != nil {
+			return searchSubscriptionsRequest{}, &ToolError{
+				Code:      CodeInvalidArgument,
+				Message:   fmt.Sprintf("invalid name_glob %q: %v", in.NameGlob, err),
+				Retriable: false,
+			}
 		}
-		sort.Strings(names)
-		for _, name := range names {
-			rule := rules[name]
-			if !ruleIsManaged(rule) {
+	}
+	pageLimit, terr := normalizeSearchLimit(in.Limit)
+	if terr != nil {
+		return searchSubscriptionsRequest{}, terr
+	}
+	pageOffset, terr := normalizeSearchOffset(in.Offset)
+	if terr != nil {
+		return searchSubscriptionsRequest{}, terr
+	}
+	recentLimit, terr := normalizeRecentItemsLimit(in.RecentItemsLimit)
+	if terr != nil {
+		return searchSubscriptionsRequest{}, terr
+	}
+	var sinceCutoff time.Time
+	if in.Since != "" {
+		t, err := time.Parse(time.RFC3339, in.Since)
+		if err != nil {
+			return searchSubscriptionsRequest{}, &ToolError{
+				Code:      CodeInvalidArgument,
+				Message:   "since must be RFC3339: " + err.Error(),
+				Retriable: false,
+			}
+		}
+		sinceCutoff = t
+	}
+	return searchSubscriptionsRequest{
+		in:          in,
+		pageLimit:   pageLimit,
+		pageOffset:  pageOffset,
+		recentLimit: recentLimit,
+		sinceCutoff: sinceCutoff,
+	}, nil
+}
+
+// projectAndFilterSubscriptions walks the managed rules in
+// alphabetical order, applies the name/feed_url filters, and projects
+// each survivor into the wire shape. Items projection happens here so
+// pagination operates on the filtered+projected set (not the raw rule
+// list — a name_glob with a high offset shouldn't return an empty
+// page just because unmatched rules occupied the early indices).
+func projectAndFilterSubscriptions(
+	rules qbt.RSSRules,
+	items qbt.RSSItems,
+	req searchSubscriptionsRequest,
+	resolver *savepath.Resolver,
+) []Subscription {
+	names := make([]string, 0, len(rules))
+	for name := range rules {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	out := make([]Subscription, 0, len(names))
+	for _, name := range names {
+		rule := rules[name]
+		if !ruleIsManaged(rule) {
+			continue
+		}
+		feedPath := rule.AffectedFeeds[0]
+		feed, _ := findFeedAtPath(items, feedPath)
+		if req.in.NameGlob != "" {
+			if ok, _ := path.Match(req.in.NameGlob, name); !ok {
 				continue
 			}
-			feedPath := rule.AffectedFeeds[0]
-			feed, _ := findFeedAtPath(items, feedPath)
-			sub := projectSubscription(name, rule, feed, resolver)
-			if in.IncludeRecentItems {
-				sub.RecentItems = projectRecentItems(feed.Articles, limit, sinceCutoff)
-			}
-			out.Subscriptions = append(out.Subscriptions, sub)
 		}
-		return out, nil
+		if req.in.FeedURLSubstring != "" && !strings.Contains(feed.URL, req.in.FeedURLSubstring) {
+			continue
+		}
+		sub := projectSubscription(name, rule, feed, resolver)
+		if req.in.IncludeRecentItems {
+			sub.RecentItems = projectRecentItems(feed.Articles, req.recentLimit, req.sinceCutoff)
+		}
+		out = append(out, sub)
 	}
+	return out
+}
+
+// paginateSubscriptions slices the filtered set per offset+limit and
+// reports whether more entries exist past the returned page. Mirrors
+// paginateDownloads but on the Subscription value type.
+func paginateSubscriptions(filtered []Subscription, offset, limit int) ([]Subscription, bool) {
+	total := len(filtered)
+	start := offset
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	return filtered[start:end], end < total
 }
 
 // ruleIsManaged tests whether a qBittorrent rule belongs to the
@@ -334,9 +435,9 @@ func normalizeRecentItemsLimit(in int) (int, *ToolError) {
 	return in, nil
 }
 
-// --- set_subscription ---
+// --- qbit_subscribe ---
 
-type SetSubscriptionInput struct {
+type SubscribeInput struct {
 	Name           string   `json:"name" jsonschema:"unique subscription name; doubles as the underlying qBittorrent rule name."`
 	FeedURL        string   `json:"feed_url" jsonschema:"RSS feed URL. Subscriptions sharing the same feed_url share storage transparently. Immutable for the lifetime of the subscription."`
 	Enabled        *bool    `json:"enabled,omitempty" jsonschema:"enable or disable the rule; default true on create."`
@@ -351,9 +452,9 @@ type SetSubscriptionInput struct {
 	AddPaused      *bool    `json:"add_paused,omitempty" jsonschema:"add matched downloads in paused state."`
 }
 
-func setSubscriptionHandler(client *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger) internalHandler[SetSubscriptionInput, OkOutput] {
-	return func(ctx context.Context, in SetSubscriptionInput) (OkOutput, *ToolError) {
-		if terr := validateSetSubscription(in); terr != nil {
+func subscribeHandler(client *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger) internalHandler[SubscribeInput, OkOutput] {
+	return func(ctx context.Context, in SubscribeInput) (OkOutput, *ToolError) {
+		if terr := validateSubscribe(in); terr != nil {
 			return OkOutput{}, terr
 		}
 		savePath, rerr := resolver.Resolve(in.Destination)
@@ -382,7 +483,7 @@ func setSubscriptionHandler(client *qbt.Client, resolver *savepath.Resolver, log
 			return OkOutput{}, errorFromSDK(err)
 		}
 
-		auditMutation(ctx, logger, slog.LevelInfo, "subscription_set", []string{in.Name},
+		auditMutation(ctx, logger, slog.LevelInfo, "subscribe", []string{in.Name},
 			slog.String("feed_url", in.FeedURL),
 			slog.String("destination", in.Destination),
 			slog.Any("tags", in.Tags),
@@ -402,7 +503,7 @@ func setSubscriptionHandler(client *qbt.Client, resolver *savepath.Resolver, log
 	}
 }
 
-func validateSetSubscription(in SetSubscriptionInput) *ToolError {
+func validateSubscribe(in SubscribeInput) *ToolError {
 	if strings.TrimSpace(in.Name) == "" {
 		return &ToolError{Code: CodeInvalidArgument, Message: "name is required", Retriable: false}
 	}
@@ -438,7 +539,7 @@ func feedExistsAtPath(ctx context.Context, client *qbt.Client, feedPath string) 
 	return ok, nil
 }
 
-func buildRule(in SetSubscriptionInput, feedPath, savePath string) qbt.RSSAutoDownloadRule {
+func buildRule(in SubscribeInput, feedPath, savePath string) qbt.RSSAutoDownloadRule {
 	enabled := true
 	if in.Enabled != nil {
 		enabled = *in.Enabled
@@ -478,14 +579,14 @@ func buildRule(in SetSubscriptionInput, feedPath, savePath string) qbt.RSSAutoDo
 
 func ptrBool(b bool) *bool { return &b }
 
-// --- delete_subscription ---
+// --- qbit_unsubscribe ---
 
-type DeleteSubscriptionInput struct {
+type UnsubscribeInput struct {
 	Name string `json:"name" jsonschema:"name of the subscription to remove."`
 }
 
-func deleteSubscriptionHandler(client *qbt.Client, logger *slog.Logger) internalHandler[DeleteSubscriptionInput, OkOutput] {
-	return func(ctx context.Context, in DeleteSubscriptionInput) (OkOutput, *ToolError) {
+func unsubscribeHandler(client *qbt.Client, logger *slog.Logger) internalHandler[UnsubscribeInput, OkOutput] {
+	return func(ctx context.Context, in UnsubscribeInput) (OkOutput, *ToolError) {
 		if strings.TrimSpace(in.Name) == "" {
 			return OkOutput{}, &ToolError{Code: CodeInvalidArgument, Message: "name is required", Retriable: false}
 		}
@@ -503,7 +604,7 @@ func deleteSubscriptionHandler(client *qbt.Client, logger *slog.Logger) internal
 		}
 		feedPath := rule.AffectedFeeds[0]
 
-		auditMutation(ctx, logger, slog.LevelWarn, "subscription_delete", []string{in.Name},
+		auditMutation(ctx, logger, slog.LevelWarn, "unsubscribe", []string{in.Name},
 			slog.String("feed_path", feedPath),
 		)
 

@@ -17,47 +17,50 @@ import (
 	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
 )
 
-// registerDownloads wires the 3 download tools onto s: list_downloads,
-// add_download, remove_downloads.
+// registerDownloads wires the 3 download tools onto s:
+// qbit_search_downloads, qbit_add_download, qbit_remove_downloads.
 //
-// No get_download — use list_downloads with a single-hash query and the
-// trackers/files include_fields keys for the same projection depth.
-// No pause/resume — operator concern, not an agent workflow (pause/resume
-// fits cron/maintenance windows, not the add/observe/remove agent loop).
+// No qbit_get_download — qbit_search_downloads with a single-hash
+// query and the trackers/files include_fields keys covers the same
+// projection depth.
+// No pause/resume — operator concern, not an agent workflow
+// (pause/resume fits cron/maintenance windows, not the
+// add/observe/remove agent loop).
 // No update — everything (destination, tags, name) is set at creation
-// time via add_download; mid-life metadata churn is not a workflow.
+// time via qbit_add_download; mid-life metadata churn is not a
+// workflow.
 func registerDownloads(s *mcpsdk.Server, client *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger) {
 	destHint := resolver.DescriptionHint()
 
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
-			Name:        "list_downloads",
-			Description: "List downloads with filtering, sorting, and pagination. Default projection is lean (hash, name, state, progress, sizes, speeds, eta, ratio, tags, added_on). Use include_fields to opt into richer fields including save_path, magnet_uri, peer/seed counts, flags, ratio_limit, seeding_time. The special value include_fields=[\"all\"] enables every opt-in field except trackers/files. The trackers and files keys require single-hash selection (exactly one hash in hashes, no states/tags filter) to avoid N+1 fan-out. Default limit 50, max 200; paginate via offset.",
+			Name:        "qbit_search_downloads",
+			Description: "Search downloads with filtering, sorting, and pagination. Default projection is lean (hash, name, state, progress, sizes, speeds, eta, ratio, tags, added_on). Use include_fields to opt into richer fields including save_path, magnet_uri, peer/seed counts, flags, ratio_limit, seeding_time. The special value include_fields=[\"all\"] enables every opt-in field except trackers/files. The trackers and files keys require single-hash selection (exactly one hash in hashes, no states/tags filter) to avoid N+1 fan-out. Default limit 50, max 200; paginate via offset.",
 			Annotations: readOnlyAnnotations(),
 		},
-		wrap("list_downloads", logger, listDownloadsHandler(client)),
+		wrap("qbit_search_downloads", logger, searchDownloadsHandler(client)),
 	)
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
-			Name:        "add_download",
-			Description: "Add a download by magnet URI (URLs and .torrent file uploads are not supported in v1). The hash is parsed from the magnet's xt=urn:btih: parameter and returned synchronously. The destination field selects a deploy-time-configured save destination by name; raw filesystem paths are not accepted. " + destHint,
+			Name:        "qbit_add_download",
+			Description: "Add a download by magnet URI (URLs and .torrent file uploads are not supported in v1). The hash is parsed from the magnet's xt=urn:btih: parameter and returned synchronously. Idempotent: re-adding a hash qBittorrent already knows about leaves the live download untouched and reports already_existed=true. The destination field selects a deploy-time-configured save destination by name; raw filesystem paths are not accepted. " + destHint,
 			Annotations: mutatingAnnotations(false),
 		},
-		wrap("add_download", logger, addDownloadHandler(client, resolver, logger)),
+		wrap("qbit_add_download", logger, addDownloadHandler(client, resolver, logger)),
 	)
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
-			Name:        "remove_downloads",
+			Name:        "qbit_remove_downloads",
 			Description: "Remove downloads from qBittorrent's tracking. Pass exactly one of hashes (explicit set) or filter (states/tags). Files on disk are not deleted — file lifecycle is handled by the operator (cron, kura's trash, manual rm). This tool only forgets the download from qbit's perspective.",
 			Annotations: mutatingAnnotations(true),
 		},
-		wrap("remove_downloads", logger, removeDownloadsHandler(client, logger)),
+		wrap("qbit_remove_downloads", logger, removeDownloadsHandler(client, logger)),
 	)
 }
 
-// --- list_downloads ---
+// --- qbit_search_downloads ---
 
-type ListDownloadsInput struct {
+type SearchDownloadsInput struct {
 	States        []NormalizedState `json:"states,omitempty" jsonschema:"optional state filter; OR semantics across the array. one of downloading, seeding, paused, stalled, queued, checking, errored, unknown"`
 	Tags          []string          `json:"tags,omitempty" jsonschema:"tag-pattern filter; OR semantics. each entry is a shell-style glob (path.Match: *, ?, [abc]); plain strings match exactly. example: ['tvdb:*'] finds every download tagged tvdb:NNNNN."`
 	Hashes        []string          `json:"hashes,omitempty" jsonschema:"explicit set of hashes to return. when combined with states/tags, hashes are pre-filtered upstream and states/tags further restrict the result (AND semantics)."`
@@ -67,16 +70,16 @@ type ListDownloadsInput struct {
 	IncludeFields []string          `json:"include_fields,omitempty" jsonschema:"opt-in fields. lean defaults to none. valid: save_path, content_path, download_path, magnet_uri, completion_on, last_activity, total_uploaded, total_downloaded, total_size, seeds, seeds_incomplete, peers, tracker_count, auto_tmm, sequential, force_start, super_seeding, first_last_piece_prio, ratio_limit, seeding_time, seeding_time_limit, private, trackers, files. Special value 'all' expands to every field except trackers/files. trackers and files require single-hash selection."`
 }
 
-type ListDownloadsOutput struct {
+type SearchDownloadsOutput struct {
 	Count     int        `json:"count"`
 	HasMore   bool       `json:"has_more"`
 	Downloads []Download `json:"downloads"`
 }
 
 const (
-	defaultListLimit = 50
-	maxListLimit     = 200
-	qbtETAUnknown    = 8640000 // qBittorrent's "100 days" sentinel for unknown ETA
+	defaultSearchLimit = 50
+	maxSearchLimit     = 200
+	qbtETAUnknown      = 8640000 // qBittorrent's "100 days" sentinel for unknown ETA
 )
 
 // sortSpec maps a public sort enum value to qBittorrent's native sort field
@@ -86,7 +89,7 @@ type sortSpec struct {
 	reverse bool
 }
 
-var listDownloadsSortMap = map[string]sortSpec{
+var searchDownloadsSortMap = map[string]sortSpec{
 	"name_asc":      {"name", false},
 	"name_desc":     {"name", true},
 	"added_on_asc":  {"added_on", false},
@@ -146,21 +149,21 @@ var validIncludeFields = func() map[string]bool {
 	return out
 }()
 
-// listDownloadsRequest is the validated, ready-to-execute form of a
-// ListDownloadsInput. prepareListDownloads produces it after every
+// searchDownloadsRequest is the validated, ready-to-execute form of a
+// SearchDownloadsInput. prepareSearchDownloads produces it after every
 // validation rule, keeping the handler body thin.
-type listDownloadsRequest struct {
+type searchDownloadsRequest struct {
 	opts       qbt.TorrentFilterOptions
 	includeSet map[string]bool
 	limit      int
 	offset     int
 }
 
-func listDownloadsHandler(client *qbt.Client) internalHandler[ListDownloadsInput, ListDownloadsOutput] {
-	return func(ctx context.Context, in ListDownloadsInput) (ListDownloadsOutput, *ToolError) {
-		empty := ListDownloadsOutput{Downloads: []Download{}}
+func searchDownloadsHandler(client *qbt.Client) internalHandler[SearchDownloadsInput, SearchDownloadsOutput] {
+	return func(ctx context.Context, in SearchDownloadsInput) (SearchDownloadsOutput, *ToolError) {
+		empty := SearchDownloadsOutput{Downloads: []Download{}}
 
-		req, terr := prepareListDownloads(in)
+		req, terr := prepareSearchDownloads(in)
 		if terr != nil {
 			return empty, terr
 		}
@@ -176,7 +179,7 @@ func listDownloadsHandler(client *qbt.Client) internalHandler[ListDownloadsInput
 		}
 
 		page, hasMore := paginateDownloads(filtered, req.offset, req.limit)
-		out := ListDownloadsOutput{
+		out := SearchDownloadsOutput{
 			Count:     len(page),
 			HasMore:   hasMore,
 			Downloads: make([]Download, 0, len(page)),
@@ -199,34 +202,34 @@ func listDownloadsHandler(client *qbt.Client) internalHandler[ListDownloadsInput
 	}
 }
 
-// prepareListDownloads validates input and assembles the upstream filter
+// prepareSearchDownloads validates input and assembles the upstream filter
 // options plus the resolved include-fields set and clamped limit/offset.
 // Enforces the single-hash rule on trackers/files include_fields.
-func prepareListDownloads(in ListDownloadsInput) (listDownloadsRequest, *ToolError) {
-	limit, terr := normalizeListLimit(in.Limit)
+func prepareSearchDownloads(in SearchDownloadsInput) (searchDownloadsRequest, *ToolError) {
+	limit, terr := normalizeSearchLimit(in.Limit)
 	if terr != nil {
-		return listDownloadsRequest{}, terr
+		return searchDownloadsRequest{}, terr
 	}
-	offset, terr := normalizeListOffset(in.Offset)
+	offset, terr := normalizeSearchOffset(in.Offset)
 	if terr != nil {
-		return listDownloadsRequest{}, terr
+		return searchDownloadsRequest{}, terr
 	}
 	sortField, reverse, terr := resolveSort(in.Sort)
 	if terr != nil {
-		return listDownloadsRequest{}, terr
+		return searchDownloadsRequest{}, terr
 	}
 	if terr := validateStates(in.States); terr != nil {
-		return listDownloadsRequest{}, terr
+		return searchDownloadsRequest{}, terr
 	}
 	if terr := validateTagPatterns(in.Tags); terr != nil {
-		return listDownloadsRequest{}, terr
+		return searchDownloadsRequest{}, terr
 	}
 	includeSet, terr := resolveIncludeFields(in.IncludeFields)
 	if terr != nil {
-		return listDownloadsRequest{}, terr
+		return searchDownloadsRequest{}, terr
 	}
 	if (includeSet["trackers"] || includeSet["files"]) && !isSingleHashSelection(in) {
-		return listDownloadsRequest{}, &ToolError{
+		return searchDownloadsRequest{}, &ToolError{
 			Code:      CodeInvalidArgument,
 			Message:   "trackers and files require single-hash selection: exactly one entry in hashes, no states or tags filter; otherwise per-hash fetches would fan out N+1 across the result set",
 			Retriable: false,
@@ -236,10 +239,10 @@ func prepareListDownloads(in ListDownloadsInput) (listDownloadsRequest, *ToolErr
 	if len(in.Hashes) > 0 {
 		opts.Hashes = in.Hashes
 	}
-	return listDownloadsRequest{opts: opts, includeSet: includeSet, limit: limit, offset: offset}, nil
+	return searchDownloadsRequest{opts: opts, includeSet: includeSet, limit: limit, offset: offset}, nil
 }
 
-func isSingleHashSelection(in ListDownloadsInput) bool {
+func isSingleHashSelection(in SearchDownloadsInput) bool {
 	return len(in.Hashes) == 1 && len(in.States) == 0 && len(in.Tags) == 0
 }
 
@@ -286,20 +289,20 @@ func paginateDownloads(filtered []qbt.Torrent, offset, limit int) ([]qbt.Torrent
 	return filtered[start:end], end < total
 }
 
-func normalizeListLimit(in int) (int, *ToolError) {
+func normalizeSearchLimit(in int) (int, *ToolError) {
 	if in < 0 {
 		return 0, &ToolError{Code: CodeInvalidArgument, Message: "limit must be >= 0", Retriable: false}
 	}
 	if in == 0 {
-		return defaultListLimit, nil
+		return defaultSearchLimit, nil
 	}
-	if in > maxListLimit {
-		return maxListLimit, nil
+	if in > maxSearchLimit {
+		return maxSearchLimit, nil
 	}
 	return in, nil
 }
 
-func normalizeListOffset(in int) (int, *ToolError) {
+func normalizeSearchOffset(in int) (int, *ToolError) {
 	if in < 0 {
 		return 0, &ToolError{Code: CodeInvalidArgument, Message: "offset must be >= 0", Retriable: false}
 	}
@@ -310,7 +313,7 @@ func resolveSort(s string) (field string, reverse bool, terr *ToolError) {
 	if s == "" {
 		s = "added_on_desc"
 	}
-	spec, ok := listDownloadsSortMap[s]
+	spec, ok := searchDownloadsSortMap[s]
 	if !ok {
 		return "", false, &ToolError{
 			Code:      CodeInvalidArgument,
@@ -322,23 +325,32 @@ func resolveSort(s string) (field string, reverse bool, terr *ToolError) {
 }
 
 func validSortNames() string {
-	out := make([]string, 0, len(listDownloadsSortMap))
-	for k := range listDownloadsSortMap {
+	out := make([]string, 0, len(searchDownloadsSortMap))
+	for k := range searchDownloadsSortMap {
 		out = append(out, k)
 	}
 	sort.Strings(out)
 	return strings.Join(out, ", ")
 }
 
+// validateStates normalizes each entry to lowercase before checking the
+// enum, then writes the lowercased value back so downstream filtering
+// matches the canonical form. The model commonly emits "Downloading" /
+// "DOWNLOADING" / "downloading" interchangeably depending on prior
+// context; rejecting non-lowercase variants would be a footgun for no
+// reason — the underlying state strings are case-insensitive on the
+// wire.
 func validateStates(states []NormalizedState) *ToolError {
-	for _, s := range states {
-		if !isValidNormalizedState(s) {
+	for i, s := range states {
+		lower := NormalizedState(strings.ToLower(string(s)))
+		if !isValidNormalizedState(lower) {
 			return &ToolError{
 				Code:      CodeInvalidArgument,
 				Message:   fmt.Sprintf("unknown state %q; valid: downloading, seeding, paused, stalled, queued, checking, errored, unknown", s),
 				Retriable: false,
 			}
 		}
+		states[i] = lower
 	}
 	return nil
 }
@@ -519,7 +531,7 @@ func fetchFiles(ctx context.Context, client *qbt.Client, hash string, d *Downloa
 	return nil
 }
 
-// --- add_download ---
+// --- qbit_add_download ---
 
 type AddDownloadInput struct {
 	Magnet      string   `json:"magnet" jsonschema:"magnet URI with xt=urn:btih:<hash> parameter. URLs and torrent-file uploads are not supported in v1."`
@@ -665,7 +677,7 @@ func validateAddDownloadTags(tags []string) *ToolError {
 	return nil
 }
 
-// --- remove_downloads ---
+// --- qbit_remove_downloads ---
 
 // HashesOrFilter is the bulk-op selector: pass either Hashes or Filter,
 // never both, never neither. resolveTargets returns invalid_argument when

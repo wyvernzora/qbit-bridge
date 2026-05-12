@@ -58,17 +58,17 @@ func TestListTools_All8Registered(t *testing.T) {
 	}
 	want := map[string]bool{
 		// downloads (3)
-		"list_downloads":   false,
-		"add_download":     false,
-		"remove_downloads": false,
+		"qbit_search_downloads": false,
+		"qbit_add_download":     false,
+		"qbit_remove_downloads": false,
 		// tags (1)
-		"list_tags": false,
+		"qbit_list_tags": false,
 		// destinations (1)
-		"list_destinations": false,
+		"qbit_list_destinations": false,
 		// subscriptions (3)
-		"list_subscriptions":  false,
-		"set_subscription":    false,
-		"delete_subscription": false,
+		"qbit_search_subscriptions": false,
+		"qbit_subscribe":            false,
+		"qbit_unsubscribe":          false,
 	}
 	for _, tool := range res.Tools {
 		if _, ok := want[tool.Name]; !ok {
@@ -93,18 +93,21 @@ func TestListTools_All8Registered(t *testing.T) {
 	}
 }
 
-func TestCallTool_StubReturnsNotImplemented(t *testing.T) {
+func TestCallTool_UpstreamUnreachableReturnsIsError(t *testing.T) {
+	// startTestSession points the qBittorrent client at 127.0.0.1:1
+	// (unreachable). Calling any real tool should surface a structured
+	// IsError=true result rather than a transport-level failure.
 	cs, cleanup := startTestSession(t)
 	defer cleanup()
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
-		Name:      "list_downloads",
+		Name:      "qbit_search_downloads",
 		Arguments: map[string]any{},
 	})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
 	}
 	if !res.IsError {
-		t.Fatal("expected stub handler to return IsError=true")
+		t.Fatal("expected unreachable-upstream call to surface IsError=true")
 	}
 }
 

@@ -134,9 +134,9 @@ func mustResolver(t *testing.T, spec string) *savepath.Resolver {
 	return r
 }
 
-func callListDownloads(t *testing.T, client *qbt.Client, in ListDownloadsInput) (ListDownloadsOutput, *ToolError) {
+func callSearchDownloads(t *testing.T, client *qbt.Client, in SearchDownloadsInput) (SearchDownloadsOutput, *ToolError) {
 	t.Helper()
-	h := listDownloadsHandler(client)
+	h := searchDownloadsHandler(client)
 	return h(context.Background(), in)
 }
 
@@ -160,9 +160,9 @@ func bufferedLogger() (*bytes.Buffer, *slog.Logger) {
 
 // --- list_downloads ---
 
-func TestListDownloads_DefaultReturnsAll(t *testing.T) {
+func TestSearchDownloads_DefaultReturnsAll(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, terr := callListDownloads(t, client, ListDownloadsInput{})
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{})
 	if terr != nil {
 		t.Fatalf("unexpected error: %+v", terr)
 	}
@@ -177,9 +177,9 @@ func TestListDownloads_DefaultReturnsAll(t *testing.T) {
 	}
 }
 
-func TestListDownloads_LeanProjectionOmitsOptIn(t *testing.T) {
+func TestSearchDownloads_LeanProjectionOmitsOptIn(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{})
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{})
 	if len(out.Downloads) == 0 {
 		t.Fatal("expected results")
 	}
@@ -198,9 +198,9 @@ func TestListDownloads_LeanProjectionOmitsOptIn(t *testing.T) {
 	}
 }
 
-func TestListDownloads_IncludeFieldsPopulatesOnlyRequested(t *testing.T) {
+func TestSearchDownloads_IncludeFieldsPopulatesOnlyRequested(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{
 		IncludeFields: []string{"save_path", "seeds"},
 	})
 	first := out.Downloads[0]
@@ -215,11 +215,11 @@ func TestListDownloads_IncludeFieldsPopulatesOnlyRequested(t *testing.T) {
 	}
 }
 
-func TestListDownloads_IncludeAllExpandsToEveryFieldExceptTrackersAndFiles(t *testing.T) {
+func TestSearchDownloads_IncludeAllExpandsToEveryFieldExceptTrackersAndFiles(t *testing.T) {
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/torrents/info": {body: fixture1Download},
 	})
-	out, terr := callListDownloads(t, client, ListDownloadsInput{
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{
 		Hashes:        []string{"aaa"},
 		IncludeFields: []string{"all"},
 	})
@@ -256,21 +256,21 @@ func TestListDownloads_IncludeAllExpandsToEveryFieldExceptTrackersAndFiles(t *te
 	}
 }
 
-func TestListDownloads_TrackersOrFilesRequireSingleHash(t *testing.T) {
+func TestSearchDownloads_TrackersOrFilesRequireSingleHash(t *testing.T) {
 	cases := []struct {
 		name string
-		in   ListDownloadsInput
+		in   SearchDownloadsInput
 	}{
-		{"no hashes", ListDownloadsInput{IncludeFields: []string{"trackers"}}},
-		{"multiple hashes", ListDownloadsInput{Hashes: []string{"aaa", "bbb"}, IncludeFields: []string{"trackers"}}},
-		{"with states filter", ListDownloadsInput{Hashes: []string{"aaa"}, States: []NormalizedState{StateDownloading}, IncludeFields: []string{"trackers"}}},
-		{"with tags filter", ListDownloadsInput{Hashes: []string{"aaa"}, Tags: []string{"tvdb:*"}, IncludeFields: []string{"trackers"}}},
-		{"files variant", ListDownloadsInput{Hashes: []string{"aaa", "bbb"}, IncludeFields: []string{"files"}}},
+		{"no hashes", SearchDownloadsInput{IncludeFields: []string{"trackers"}}},
+		{"multiple hashes", SearchDownloadsInput{Hashes: []string{"aaa", "bbb"}, IncludeFields: []string{"trackers"}}},
+		{"with states filter", SearchDownloadsInput{Hashes: []string{"aaa"}, States: []NormalizedState{StateDownloading}, IncludeFields: []string{"trackers"}}},
+		{"with tags filter", SearchDownloadsInput{Hashes: []string{"aaa"}, Tags: []string{"tvdb:*"}, IncludeFields: []string{"trackers"}}},
+		{"files variant", SearchDownloadsInput{Hashes: []string{"aaa", "bbb"}, IncludeFields: []string{"files"}}},
 	}
 	client, _ := newQbitMock(t, fixture6Downloads)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, terr := callListDownloads(t, client, tc.in)
+			_, terr := callSearchDownloads(t, client, tc.in)
 			if terr == nil || terr.Code != CodeInvalidArgument {
 				t.Errorf("err = %+v, want invalid_argument", terr)
 			}
@@ -278,12 +278,12 @@ func TestListDownloads_TrackersOrFilesRequireSingleHash(t *testing.T) {
 	}
 }
 
-func TestListDownloads_IncludeTrackersSingleHashSucceeds(t *testing.T) {
+func TestSearchDownloads_IncludeTrackersSingleHashSucceeds(t *testing.T) {
 	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/torrents/info":     {body: fixture1Download},
 		"/api/v2/torrents/trackers": {body: fixtureTrackers},
 	})
-	out, terr := callListDownloads(t, client, ListDownloadsInput{
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{
 		Hashes:        []string{"aaa"},
 		IncludeFields: []string{"trackers"},
 	})
@@ -304,12 +304,12 @@ func TestListDownloads_IncludeTrackersSingleHashSucceeds(t *testing.T) {
 	}
 }
 
-func TestListDownloads_IncludeFilesSingleHashSucceeds(t *testing.T) {
+func TestSearchDownloads_IncludeFilesSingleHashSucceeds(t *testing.T) {
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/torrents/info":  {body: fixture1Download},
 		"/api/v2/torrents/files": {body: fixtureFiles},
 	})
-	out, terr := callListDownloads(t, client, ListDownloadsInput{
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{
 		Hashes:        []string{"aaa"},
 		IncludeFields: []string{"files"},
 	})
@@ -324,13 +324,13 @@ func TestListDownloads_IncludeFilesSingleHashSucceeds(t *testing.T) {
 	}
 }
 
-func TestListDownloads_IncludeTrackersAndFiles(t *testing.T) {
+func TestSearchDownloads_IncludeTrackersAndFiles(t *testing.T) {
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/torrents/info":     {body: fixture1Download},
 		"/api/v2/torrents/trackers": {body: fixtureTrackers},
 		"/api/v2/torrents/files":    {body: fixtureFiles},
 	})
-	out, terr := callListDownloads(t, client, ListDownloadsInput{
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{
 		Hashes:        []string{"aaa"},
 		IncludeFields: []string{"trackers", "files"},
 	})
@@ -342,12 +342,12 @@ func TestListDownloads_IncludeTrackersAndFiles(t *testing.T) {
 	}
 }
 
-func TestListDownloads_TrackersFetchErrorFailsCall(t *testing.T) {
+func TestSearchDownloads_TrackersFetchErrorFailsCall(t *testing.T) {
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/torrents/info":     {body: fixture1Download},
 		"/api/v2/torrents/trackers": {status: http.StatusInternalServerError},
 	})
-	_, terr := callListDownloads(t, client, ListDownloadsInput{
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{
 		Hashes:        []string{"aaa"},
 		IncludeFields: []string{"trackers"},
 	})
@@ -356,9 +356,9 @@ func TestListDownloads_TrackersFetchErrorFailsCall(t *testing.T) {
 	}
 }
 
-func TestListDownloads_StateFilter(t *testing.T) {
+func TestSearchDownloads_StateFilter(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, terr := callListDownloads(t, client, ListDownloadsInput{
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{
 		States: []NormalizedState{StateDownloading},
 	})
 	if terr != nil {
@@ -374,9 +374,25 @@ func TestListDownloads_StateFilter(t *testing.T) {
 	}
 }
 
-func TestListDownloads_MultiStateFilter(t *testing.T) {
+func TestSearchDownloads_StateFilterCaseInsensitive(t *testing.T) {
+	// Agent commonly emits "Downloading" / "DOWNLOADING" depending on
+	// the surrounding prose. validateStates lowercases each entry; the
+	// downstream filter matches the canonical lowercase form.
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{
+		States: []NormalizedState{"Downloading", "SEEDING"},
+	})
+	if terr != nil {
+		t.Fatalf("unexpected error: %+v", terr)
+	}
+	if out.Count != 4 {
+		t.Errorf("count = %d, want 4 (downloading + seeding match)", out.Count)
+	}
+}
+
+func TestSearchDownloads_MultiStateFilter(t *testing.T) {
+	client, _ := newQbitMock(t, fixture6Downloads)
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{
 		States: []NormalizedState{StateDownloading, StateSeeding},
 	})
 	if out.Count != 4 {
@@ -384,9 +400,9 @@ func TestListDownloads_MultiStateFilter(t *testing.T) {
 	}
 }
 
-func TestListDownloads_TagGlob(t *testing.T) {
+func TestSearchDownloads_TagGlob(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{
 		Tags: []string{"tvdb:*"},
 	})
 	if out.Count != 3 {
@@ -394,90 +410,90 @@ func TestListDownloads_TagGlob(t *testing.T) {
 	}
 }
 
-func TestListDownloads_TagLiteralExact(t *testing.T) {
+func TestSearchDownloads_TagLiteralExact(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{Tags: []string{"weekly"}})
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{Tags: []string{"weekly"}})
 	if out.Count != 2 {
 		t.Errorf("count = %d, want 2", out.Count)
 	}
 }
 
-func TestListDownloads_TagUnion(t *testing.T) {
+func TestSearchDownloads_TagUnion(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{Tags: []string{"tvdb:*", "weekly"}})
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{Tags: []string{"tvdb:*", "weekly"}})
 	if out.Count != 4 {
 		t.Errorf("count = %d, want 4", out.Count)
 	}
 }
 
-func TestListDownloads_HashesPassedToUpstream(t *testing.T) {
+func TestSearchDownloads_HashesPassedToUpstream(t *testing.T) {
 	client, cap := newQbitMock(t, fixture6Downloads)
-	_, _ = callListDownloads(t, client, ListDownloadsInput{Hashes: []string{"aaa", "bbb"}})
+	_, _ = callSearchDownloads(t, client, SearchDownloadsInput{Hashes: []string{"aaa", "bbb"}})
 	got := cap.Query.Get("hashes")
 	if got != "aaa|bbb" {
 		t.Errorf("upstream hashes param = %q, want aaa|bbb", got)
 	}
 }
 
-func TestListDownloads_SortPassedToUpstream(t *testing.T) {
+func TestSearchDownloads_SortPassedToUpstream(t *testing.T) {
 	client, cap := newQbitMock(t, fixture6Downloads)
-	_, _ = callListDownloads(t, client, ListDownloadsInput{Sort: "name_desc"})
+	_, _ = callSearchDownloads(t, client, SearchDownloadsInput{Sort: "name_desc"})
 	if cap.Query.Get("sort") != "name" || cap.Query.Get("reverse") != "true" {
 		t.Errorf("sort/reverse = %q/%q", cap.Query.Get("sort"), cap.Query.Get("reverse"))
 	}
 }
 
-func TestListDownloads_DefaultSortIsAddedOnDesc(t *testing.T) {
+func TestSearchDownloads_DefaultSortIsAddedOnDesc(t *testing.T) {
 	client, cap := newQbitMock(t, fixture6Downloads)
-	_, _ = callListDownloads(t, client, ListDownloadsInput{})
+	_, _ = callSearchDownloads(t, client, SearchDownloadsInput{})
 	if cap.Query.Get("sort") != "added_on" || cap.Query.Get("reverse") != "true" {
 		t.Errorf("default sort/reverse = %q/%q", cap.Query.Get("sort"), cap.Query.Get("reverse"))
 	}
 }
 
-func TestListDownloads_Pagination(t *testing.T) {
+func TestSearchDownloads_Pagination(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	page1, _ := callListDownloads(t, client, ListDownloadsInput{Limit: 2, Offset: 0})
+	page1, _ := callSearchDownloads(t, client, SearchDownloadsInput{Limit: 2, Offset: 0})
 	if page1.Count != 2 || !page1.HasMore {
 		t.Errorf("page1: count=%d has_more=%v", page1.Count, page1.HasMore)
 	}
-	page3, _ := callListDownloads(t, client, ListDownloadsInput{Limit: 2, Offset: 4})
+	page3, _ := callSearchDownloads(t, client, SearchDownloadsInput{Limit: 2, Offset: 4})
 	if page3.Count != 2 || page3.HasMore {
 		t.Errorf("page3: count=%d has_more=%v", page3.Count, page3.HasMore)
 	}
-	beyond, _ := callListDownloads(t, client, ListDownloadsInput{Limit: 2, Offset: 100})
+	beyond, _ := callSearchDownloads(t, client, SearchDownloadsInput{Limit: 2, Offset: 100})
 	if beyond.Count != 0 || beyond.HasMore {
 		t.Errorf("beyond: count=%d has_more=%v", beyond.Count, beyond.HasMore)
 	}
 }
 
-func TestListDownloads_LimitClampedToMax(t *testing.T) {
+func TestSearchDownloads_LimitClampedToMax(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{Limit: 5000})
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{Limit: 5000})
 	if out.Count != 6 {
 		t.Errorf("count = %d, want 6 (clamped to 200, fixture has 6)", out.Count)
 	}
 }
 
-func TestListDownloads_RejectsNegativeLimit(t *testing.T) {
+func TestSearchDownloads_RejectsNegativeLimit(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	_, terr := callListDownloads(t, client, ListDownloadsInput{Limit: -1})
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{Limit: -1})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Errorf("err = %+v", terr)
 	}
 }
 
-func TestListDownloads_RejectsNegativeOffset(t *testing.T) {
+func TestSearchDownloads_RejectsNegativeOffset(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	_, terr := callListDownloads(t, client, ListDownloadsInput{Offset: -1})
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{Offset: -1})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Errorf("err = %+v", terr)
 	}
 }
 
-func TestListDownloads_RejectsUnknownSort(t *testing.T) {
+func TestSearchDownloads_RejectsUnknownSort(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	_, terr := callListDownloads(t, client, ListDownloadsInput{Sort: "ratio_asc"})
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{Sort: "ratio_asc"})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Fatalf("err = %+v", terr)
 	}
@@ -486,25 +502,25 @@ func TestListDownloads_RejectsUnknownSort(t *testing.T) {
 	}
 }
 
-func TestListDownloads_RejectsMalformedTagPattern(t *testing.T) {
+func TestSearchDownloads_RejectsMalformedTagPattern(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	_, terr := callListDownloads(t, client, ListDownloadsInput{Tags: []string{"tvdb:[unclosed"}})
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{Tags: []string{"tvdb:[unclosed"}})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Fatalf("err = %+v", terr)
 	}
 }
 
-func TestListDownloads_RejectsUnknownState(t *testing.T) {
+func TestSearchDownloads_RejectsUnknownState(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	_, terr := callListDownloads(t, client, ListDownloadsInput{States: []NormalizedState{"bogus"}})
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{States: []NormalizedState{"bogus"}})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Errorf("err = %+v", terr)
 	}
 }
 
-func TestListDownloads_RejectsUnknownIncludeField(t *testing.T) {
+func TestSearchDownloads_RejectsUnknownIncludeField(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	_, terr := callListDownloads(t, client, ListDownloadsInput{IncludeFields: []string{"nope"}})
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{IncludeFields: []string{"nope"}})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Fatalf("err = %+v", terr)
 	}
@@ -513,9 +529,9 @@ func TestListDownloads_RejectsUnknownIncludeField(t *testing.T) {
 	}
 }
 
-func TestListDownloads_Upstream500IsUnavailableRetriable(t *testing.T) {
+func TestSearchDownloads_Upstream500IsUnavailableRetriable(t *testing.T) {
 	client := newQbitMockStatus(t, http.StatusInternalServerError)
-	_, terr := callListDownloads(t, client, ListDownloadsInput{})
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{})
 	if terr == nil || terr.Code != CodeUpstreamUnavailable {
 		t.Errorf("err = %+v", terr)
 	}
@@ -524,17 +540,17 @@ func TestListDownloads_Upstream500IsUnavailableRetriable(t *testing.T) {
 	}
 }
 
-func TestListDownloads_Upstream403IsForbidden(t *testing.T) {
+func TestSearchDownloads_Upstream403IsForbidden(t *testing.T) {
 	client := newQbitMockStatus(t, http.StatusForbidden)
-	_, terr := callListDownloads(t, client, ListDownloadsInput{})
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{})
 	if terr == nil || terr.Code != CodeUpstreamForbidden {
 		t.Errorf("err = %+v", terr)
 	}
 }
 
-func TestListDownloads_EmptyResult(t *testing.T) {
+func TestSearchDownloads_EmptyResult(t *testing.T) {
 	client, _ := newQbitMock(t, `[]`)
-	out, terr := callListDownloads(t, client, ListDownloadsInput{})
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{})
 	if terr != nil {
 		t.Fatalf("err = %+v", terr)
 	}
@@ -546,9 +562,9 @@ func TestListDownloads_EmptyResult(t *testing.T) {
 	}
 }
 
-func TestListDownloads_ETASentinelNormalizedToMinusOne(t *testing.T) {
+func TestSearchDownloads_ETASentinelNormalizedToMinusOne(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{})
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{})
 	var movie *Download
 	for i := range out.Downloads {
 		if out.Downloads[i].Hash == "ccc" {
@@ -560,9 +576,9 @@ func TestListDownloads_ETASentinelNormalizedToMinusOne(t *testing.T) {
 	}
 }
 
-func TestListDownloads_StateNormalizationMetaDLBecomesDownloading(t *testing.T) {
+func TestSearchDownloads_StateNormalizationMetaDLBecomesDownloading(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{})
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{})
 	var eee *Download
 	for i := range out.Downloads {
 		if out.Downloads[i].Hash == "eee" {
@@ -574,9 +590,9 @@ func TestListDownloads_StateNormalizationMetaDLBecomesDownloading(t *testing.T) 
 	}
 }
 
-func TestListDownloads_TagsSplitAndTrimmed(t *testing.T) {
+func TestSearchDownloads_TagsSplitAndTrimmed(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{})
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{})
 	var aaa *Download
 	for i := range out.Downloads {
 		if out.Downloads[i].Hash == "aaa" {
@@ -592,9 +608,9 @@ func TestListDownloads_TagsSplitAndTrimmed(t *testing.T) {
 	}
 }
 
-func TestListDownloads_EmptyTagsIsEmptySlice(t *testing.T) {
+func TestSearchDownloads_EmptyTagsIsEmptySlice(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
-	out, _ := callListDownloads(t, client, ListDownloadsInput{})
+	out, _ := callSearchDownloads(t, client, SearchDownloadsInput{})
 	var ddd *Download
 	for i := range out.Downloads {
 		if out.Downloads[i].Hash == "ddd" {
