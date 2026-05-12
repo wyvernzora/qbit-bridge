@@ -85,15 +85,3 @@ type DownloadFile struct {
 	Progress float64 `json:"progress"`
 	Priority int     `json:"priority"`
 }
-
-// notImplemented produces the placeholder error returned by every stub
-// handler in the bootstrap scaffold. Real implementations replace each
-// stub with logic that calls the autobrr SDK / qbtrss helper and
-// translates errors to *ToolError.
-func notImplemented(toolName string) *ToolError {
-	return &ToolError{
-		Code:      CodeInternal,
-		Message:   "tool " + toolName + " not implemented yet (scaffold only)",
-		Retriable: false,
-	}
-}
