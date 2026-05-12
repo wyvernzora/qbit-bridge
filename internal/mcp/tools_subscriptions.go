@@ -33,7 +33,7 @@ func registerSubscriptions(s *mcpsdk.Server, client *qbt.Client, resolver *savep
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
 			Name:        "qbit_search_subscriptions",
-			Description: "Search subscriptions with optional name/feed_url filters and pagination. Each row carries the feed URL, the rule's filter fields (must_contain, episode_filter, ...), the destination alias the rule routes matched downloads to, the tags applied at creation, and a last_match_date summary. Set include_recent_items=true to embed the most-recent feed items (capped by recent_items_limit, default 10, max 50). Default limit 50, max 200; paginate via offset.",
+			Description: "Search subscriptions with optional name/feed_url filters and pagination. Each row carries the feed URL, the rule's filter fields (must_contain, must_not_contain, use_regex), the destination alias the rule routes matched downloads to, the tags applied at creation, and a last_match_date summary. Set include_recent_items=true to embed the most-recent feed items (capped by recent_items_limit, default 10, max 50). Default limit 50, max 200; paginate via offset.",
 			Annotations: readOnlyAnnotations(),
 		},
 		wrap("qbit_search_subscriptions", logger, searchSubscriptionsHandler(client, resolver)),
@@ -107,8 +107,6 @@ type Subscription struct {
 	MustContain    string             `json:"must_contain,omitempty"`
 	MustNotContain string             `json:"must_not_contain,omitempty"`
 	UseRegex       bool               `json:"use_regex"`
-	EpisodeFilter  string             `json:"episode_filter,omitempty"`
-	SmartFilter    bool               `json:"smart_filter"`
 	SavePath       string             `json:"save_path,omitempty"`
 	Tags           []string           `json:"tags"`
 	IgnoreDays     int                `json:"ignore_days"`
@@ -340,8 +338,6 @@ func projectSubscription(name string, rule qbt.RSSAutoDownloadRule, feed qbt.RSS
 		MustContain:    rule.MustContain,
 		MustNotContain: rule.MustNotContain,
 		UseRegex:       rule.UseRegex,
-		EpisodeFilter:  rule.EpisodeFilter,
-		SmartFilter:    rule.SmartFilter,
 		SavePath:       prefixed(resolver, savePath),
 		Tags:           tags,
 		IgnoreDays:     rule.IgnoreDays,
@@ -439,11 +435,9 @@ type SubscribeInput struct {
 	Name           string   `json:"name" jsonschema:"unique subscription name; doubles as the underlying qBittorrent rule name."`
 	FeedURL        string   `json:"feed_url" jsonschema:"RSS feed URL. Subscriptions sharing the same feed_url share storage transparently. Immutable for the lifetime of the subscription."`
 	Enabled        *bool    `json:"enabled,omitempty" jsonschema:"enable or disable the rule; default true on create."`
-	MustContain    *string  `json:"must_contain,omitempty" jsonschema:"item must contain this string or regex."`
-	MustNotContain *string  `json:"must_not_contain,omitempty" jsonschema:"item must not contain this string or regex."`
-	UseRegex       *bool    `json:"use_regex,omitempty" jsonschema:"treat must_contain / must_not_contain as regex."`
-	EpisodeFilter  *string  `json:"episode_filter,omitempty" jsonschema:"qBittorrent episode-filter expression, e.g. '1x2;'."`
-	SmartFilter    *bool    `json:"smart_filter,omitempty" jsonschema:"qBittorrent's deduplicating smart filter."`
+	MustContain    *string  `json:"must_contain,omitempty" jsonschema:"item must contain this string or regex (depending on use_regex). For anime feeds like DMHY, regex is the workhorse — qBittorrent's native episode-filter and smart-filter assume Scene-style SxxEyy naming that anime trackers don't follow."`
+	MustNotContain *string  `json:"must_not_contain,omitempty" jsonschema:"item must not contain this string or regex. Applied after must_contain."`
+	UseRegex       *bool    `json:"use_regex,omitempty" jsonschema:"treat must_contain / must_not_contain as Perl-style regex. Recommended on for anime feeds."`
 	Destination    string   `json:"destination,omitempty" jsonschema:"save-destination alias for matched downloads. Accepts '<alias>' for the alias root or '<alias>:<relpath>' to target a subdirectory (relpath must not start with '/' or contain '..'). Reserved name 'unspecified' rejected — output-only sentinel. Empty inherits qBittorrent's account default."`
 	Tags           []string `json:"tags" jsonschema:"tags applied to every download the rule auto-adds. Required on every call. Editing on replace re-tags future matches only; existing matches keep their original tags."`
 	IgnoreDays     *int     `json:"ignore_days,omitempty" jsonschema:"cool-down days between matches."`
@@ -559,12 +553,6 @@ func buildRule(in SubscribeInput, feedPath, savePath string) qbt.RSSAutoDownload
 	}
 	if in.UseRegex != nil {
 		rule.UseRegex = *in.UseRegex
-	}
-	if in.EpisodeFilter != nil {
-		rule.EpisodeFilter = *in.EpisodeFilter
-	}
-	if in.SmartFilter != nil {
-		rule.SmartFilter = *in.SmartFilter
 	}
 	if in.IgnoreDays != nil {
 		rule.IgnoreDays = *in.IgnoreDays

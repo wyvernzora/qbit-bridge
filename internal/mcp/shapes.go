@@ -39,31 +39,31 @@ type Download struct {
 	Tags               []string        `json:"tags"`
 	AddedOn            int64           `json:"added_on"`
 
-	// Opt-in via list_downloads.include_fields or get_download default-rich set.
-	SavePath           string  `json:"save_path,omitempty"`
-	ContentPath        string  `json:"content_path,omitempty"`
-	DownloadPath       string  `json:"download_path,omitempty"`
-	MagnetURI          string  `json:"magnet_uri,omitempty"`
-	CompletionOn       int64   `json:"completion_on,omitempty"`
-	LastActivity       int64   `json:"last_activity,omitempty"`
-	TotalUploaded      int64   `json:"total_uploaded,omitempty"`
-	TotalDownloaded    int64   `json:"total_downloaded,omitempty"`
-	TotalSize          int64   `json:"total_size,omitempty"`
-	SeedsComplete      int64   `json:"seeds_complete,omitempty"`
-	SeedsIncomplete    int64   `json:"seeds_incomplete,omitempty"`
-	PeersConnected     int64   `json:"peers_connected,omitempty"`
-	TrackerCount       int64   `json:"tracker_count,omitempty"`
-	AutoTMM            *bool   `json:"auto_tmm,omitempty"`
-	Sequential         *bool   `json:"sequential,omitempty"`
-	ForceStart         *bool   `json:"force_start,omitempty"`
-	SuperSeeding       *bool   `json:"super_seeding,omitempty"`
-	FirstLastPiecePrio *bool   `json:"first_last_piece_prio,omitempty"`
-	RatioLimit         float64 `json:"ratio_limit,omitempty"`
-	SeedingTime        int64   `json:"seeding_time,omitempty"`
-	SeedingTimeLimit   int64   `json:"seeding_time_limit,omitempty"`
-	Private            *bool   `json:"private,omitempty"`
+	// Opt-in via qbit_search_downloads.include_fields. Field-level
+	// projection — every key listed here has exactly one entry in
+	// downloadFieldSetters; trackers and files are per-hash
+	// enrichments below.
+	SavePath        string `json:"save_path,omitempty"`
+	ContentPath     string `json:"content_path,omitempty"`
+	MagnetURI       string `json:"magnet_uri,omitempty"`
+	CompletionOn    int64  `json:"completion_on,omitempty"`
+	LastActivity    int64  `json:"last_activity,omitempty"`
+	TotalUploaded   int64  `json:"total_uploaded,omitempty"`
+	TotalDownloaded int64  `json:"total_downloaded,omitempty"`
+	TotalSize       int64  `json:"total_size,omitempty"`
+	SeedsComplete   int64  `json:"seeds_complete,omitempty"`
+	SeedsIncomplete int64  `json:"seeds_incomplete,omitempty"`
+	PeersConnected  int64  `json:"peers_connected,omitempty"`
+	TrackerCount    int64  `json:"tracker_count,omitempty"`
+	SeedingTime     int64  `json:"seeding_time,omitempty"`
+	// Private indicates a private-tracker torrent — agents that prune
+	// downloads should treat it as a "do not bulk-remove" hint to
+	// avoid hit-and-run penalties before the ratio is met.
+	Private *bool `json:"private,omitempty"`
 
-	// Opt-in via get_download.include = ["trackers", "files"].
+	// Opt-in via include = ["trackers", "files"]. Each triggers one
+	// additional upstream call per hash — response size scales with
+	// len(hashes) * per-torrent fan-out, so opt in deliberately.
 	Trackers []DownloadTracker `json:"trackers,omitempty"`
 	Files    []DownloadFile    `json:"files,omitempty"`
 }

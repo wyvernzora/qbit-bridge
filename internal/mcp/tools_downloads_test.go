@@ -265,7 +265,7 @@ func TestSearchDownloads_ContentPathPrefixedToAliasWithRelpath(t *testing.T) {
 	resolver := mustResolver(t, "anime=/data/anime")
 	out, terr := callSearchDownloadsWithResolver(t, client, resolver, SearchDownloadsInput{
 		Hashes:        []string{"aaa"},
-		IncludeFields: []string{"content_path", "download_path"},
+		IncludeFields: []string{"content_path"},
 	})
 	if terr != nil {
 		t.Fatalf("err = %+v", terr)
@@ -273,11 +273,6 @@ func TestSearchDownloads_ContentPathPrefixedToAliasWithRelpath(t *testing.T) {
 	d := out.Downloads[0]
 	if d.ContentPath != "anime:show.mkv" {
 		t.Errorf("content_path = %q, want 'anime:show.mkv'", d.ContentPath)
-	}
-	// download_path=/data/incoming has no matching alias; falls
-	// through to the unspecified sentinel.
-	if d.DownloadPath != "unspecified:data/incoming" {
-		t.Errorf("download_path = %q, want 'unspecified:data/incoming'", d.DownloadPath)
 	}
 }
 
@@ -324,12 +319,6 @@ func TestSearchDownloads_IncludeAllExpandsToEveryFieldExceptTrackersAndFiles(t *
 	if d.MagnetURI == "" {
 		t.Error("MagnetURI should be populated by 'all'")
 	}
-	if d.AutoTMM == nil || !*d.AutoTMM {
-		t.Error("AutoTMM should be true pointer")
-	}
-	if d.FirstLastPiecePrio == nil || !*d.FirstLastPiecePrio {
-		t.Error("FirstLastPiecePrio should be true pointer")
-	}
 	if d.Private == nil || !*d.Private {
 		t.Error("Private should be true pointer")
 	}
@@ -338,28 +327,6 @@ func TestSearchDownloads_IncludeAllExpandsToEveryFieldExceptTrackersAndFiles(t *
 	}
 	if d.Files != nil {
 		t.Errorf("'all' should NOT include files; got %v", d.Files)
-	}
-}
-
-func TestSearchDownloads_TrackersOrFilesRequireSingleHash(t *testing.T) {
-	cases := []struct {
-		name string
-		in   SearchDownloadsInput
-	}{
-		{"no hashes", SearchDownloadsInput{IncludeFields: []string{"trackers"}}},
-		{"multiple hashes", SearchDownloadsInput{Hashes: []string{"aaa", "bbb"}, IncludeFields: []string{"trackers"}}},
-		{"with states filter", SearchDownloadsInput{Hashes: []string{"aaa"}, States: []NormalizedState{StateDownloading}, IncludeFields: []string{"trackers"}}},
-		{"with tags filter", SearchDownloadsInput{Hashes: []string{"aaa"}, Tags: []string{"tvdb:*"}, IncludeFields: []string{"trackers"}}},
-		{"files variant", SearchDownloadsInput{Hashes: []string{"aaa", "bbb"}, IncludeFields: []string{"files"}}},
-	}
-	client, _ := newQbitMock(t, fixture6Downloads)
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, terr := callSearchDownloads(t, client, tc.in)
-			if terr == nil || terr.Code != CodeInvalidArgument {
-				t.Errorf("err = %+v, want invalid_argument", terr)
-			}
-		})
 	}
 }
 
@@ -386,6 +353,34 @@ func TestSearchDownloads_IncludeTrackersSingleHashSucceeds(t *testing.T) {
 	}
 	if captured["/api/v2/torrents/trackers"].Query.Get("hash") != "aaa" {
 		t.Errorf("trackers fetch hash param = %q", captured["/api/v2/torrents/trackers"].Query.Get("hash"))
+	}
+}
+
+func TestSearchDownloads_IncludeTrackersMultiHash(t *testing.T) {
+	// Multi-hash + trackers is allowed (the prior single-hash gate
+	// was lifted in favor of an explicit cost-scaling note in the
+	// tool description). Each hash gets its own /trackers fetch.
+	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/torrents/info":     {body: fixture6Downloads},
+		"/api/v2/torrents/trackers": {body: fixtureTrackers},
+	})
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{
+		Hashes:        []string{"aaa", "bbb"},
+		IncludeFields: []string{"trackers"},
+	})
+	if terr != nil {
+		t.Fatalf("unexpected error: %+v", terr)
+	}
+	if len(out.Downloads) < 2 {
+		t.Fatalf("expected >= 2 downloads with trackers populated; got %d", len(out.Downloads))
+	}
+	for _, d := range out.Downloads {
+		if d.Hash != "aaa" && d.Hash != "bbb" {
+			continue
+		}
+		if len(d.Trackers) != 2 {
+			t.Errorf("download %s expected 2 trackers, got %d", d.Hash, len(d.Trackers))
+		}
 	}
 }
 
@@ -1041,11 +1036,32 @@ func TestRemoveDownloads_NeitherSelectorRejected(t *testing.T) {
 	}
 }
 
-func TestRemoveDownloads_EmptyHashesRejected(t *testing.T) {
+func TestRemoveDownloads_EmptyHashesIsNoOpSuccess(t *testing.T) {
+	// An explicitly-empty hashes array is a no-op (affected_count=0),
+	// matching the filter-resolves-to-empty path. This is friendlier
+	// for defensive cleanup loops that build the hash list
+	// dynamically and might end up with nothing to remove.
+	client, captured := newQbitMockRoutes(t, removeRoutes())
+	out, terr := callRemoveDownloads(t, client, RemoveDownloadsInput{HashesOrFilter: HashesOrFilter{Hashes: []string{}}})
+	if terr != nil {
+		t.Fatalf("err = %+v, want nil (empty hashes is a no-op)", terr)
+	}
+	if out.AffectedCount != 0 {
+		t.Errorf("affected_count = %d, want 0", out.AffectedCount)
+	}
+	if captured["/api/v2/torrents/delete"].Method != "" {
+		t.Error("upstream /torrents/delete should not be called for empty hashes")
+	}
+}
+
+func TestRemoveDownloads_NeitherHashesNorFilterRejected(t *testing.T) {
+	// Omitting both selectors entirely (the agent forgot to pass
+	// one) still rejects — we refuse to guess between "no-op" and
+	// "operate on every download".
 	client, _ := newQbitMockRoutes(t, removeRoutes())
-	_, terr := callRemoveDownloads(t, client, RemoveDownloadsInput{HashesOrFilter: HashesOrFilter{Hashes: []string{}}})
+	_, terr := callRemoveDownloads(t, client, RemoveDownloadsInput{})
 	if terr == nil || terr.Code != CodeInvalidArgument {
-		t.Errorf("err = %+v", terr)
+		t.Errorf("err = %+v, want invalid_argument", terr)
 	}
 }
 

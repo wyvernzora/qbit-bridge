@@ -23,7 +23,7 @@ Things the surface is designed to make unnecessary; doing them anyway wastes tok
 - **Editing `feed_url` on an existing subscription.** Rejected with `invalid_argument`. Unsubscribe and resubscribe instead.
 - **Calling `qbit_add_download` with magnet + assuming `name` is in the response.** Magnet metadata fetch is async in qbit; `name` resolves later. Follow up with `qbit_search_downloads` filtered to the returned hash.
 - **Passing `hashes` and `filter` together to `qbit_remove_downloads`.** Rejected. Pick one.
-- **Asking for `trackers` or `files` on a multi-hash `qbit_search_downloads`.** Rejected (N+1 fan-out). Use single-hash selection.
+- **Asking for `trackers` or `files` across a wide multi-hash `qbit_search_downloads` without thinking about size.** Not rejected — but every hash triggers a separate upstream fetch, and the response payload scales linearly. Scope the query before opting in to per-hash enrichments.
 - **Retrying after `upstream_forbidden`.** That's the loopback-auth-bypass check failing; retry won't fix it. Surface the operator-action message to the user.
 
 ## Operating model
@@ -213,9 +213,11 @@ Primary read. Filtered, sorted, paginated.
 
 `include_fields` opt-in values:
 
-- **Field-level:** `save_path`, `content_path`, `download_path`, `magnet_uri`, `completion_on`, `last_activity`, `total_uploaded`, `total_downloaded`, `total_size`, `seeds`, `seeds_incomplete`, `peers`, `tracker_count`, `auto_tmm`, `sequential`, `force_start`, `super_seeding`, `first_last_piece_prio`, `ratio_limit`, `seeding_time`, `seeding_time_limit`, `private`. The three path-shaped fields (`save_path`, `content_path`, `download_path`) are rewritten to the `<alias>:<relpath>` form when they live under a configured destination — see Destinations above.
-- **Per-hash enrichments:** `trackers`, `files`. These trigger one additional upstream call per result, so they **require single-hash selection** — exactly one entry in `hashes`, no `states` filter, no `tags` filter. Anything else returns `invalid_argument` to prevent N+1 fan-out.
-- **Convenience:** `"all"` expands to every field-level key (but not trackers/files). Use `["all", "trackers", "files"]` to get the kitchen-sink projection on a single hash.
+- **Field-level:** `save_path`, `content_path`, `magnet_uri`, `completion_on`, `last_activity`, `total_uploaded`, `total_downloaded`, `total_size`, `seeds`, `seeds_incomplete`, `peers`, `tracker_count`, `seeding_time`, `private`. The two path-shaped fields (`save_path`, `content_path`) are rewritten to the `<alias>:<relpath>` form per the Destinations convention — see above.
+- **Per-hash enrichments:** `trackers`, `files`. Each triggers one additional upstream call per result hash. Response size scales with `len(hashes) * (trackers_per_torrent + files_per_torrent)`, so opt in deliberately — `trackers` on a 50-torrent page is ~500 sub-entries. No hard limit is enforced; the sidecar is trusted and the agent is expected to scope its own queries.
+- **Convenience:** `"all"` expands every field-level key (not trackers/files). Use `["all", "trackers", "files"]` for the kitchen-sink projection.
+
+`private` indicates a private-tracker torrent — agents that prune downloads should treat it as a "do not bulk-remove" hint to avoid hit-and-run penalties before the ratio is met.
 
 Off by default.
 
@@ -304,7 +306,9 @@ or:
 }
 ```
 
-Filter accepts `states` and `tags` (same semantics as `qbit_search_downloads`; tags use shell-style globs). Passing both `hashes` and `filter` returns `invalid_argument`. Passing neither also returns `invalid_argument` (refuses to operate on every download).
+Filter accepts `states` and `tags` (same semantics as `qbit_search_downloads`; tags use shell-style globs). Passing both `hashes` and `filter` returns `invalid_argument`. Passing **neither** also returns `invalid_argument` (refuses to operate on every download).
+
+**Empty selectors are a no-op success.** An explicitly-empty `hashes: []` returns `{ "affected_count": 0, "affected_hashes": [] }` with no upstream call. A `filter` that resolves to zero matches does the same. Agents building a hash list dynamically can call without guarding against the empty case. The distinction is between *empty* (provided, resolves to nothing → no-op) and *absent* (forgot to pass it at all → rejected, because we can't tell whether you meant no-op or every-download).
 
 **There is no `delete_files` field** — files on disk are never deleted by this tool. The qBittorrent entry is removed; the underlying files are an operator concern (cron, kura's trash, manual rm). Exposing on-disk deletion would punch through the destination-alias security boundary.
 
@@ -438,8 +442,6 @@ Search subscriptions with optional filtering and pagination. Each row carries en
       "must_contain": "1080p",
       "must_not_contain": "VOSTFR",
       "use_regex": false,
-      "episode_filter": "1x4-;",
-      "smart_filter": false,
       "save_path": "kura-inbox",
       "tags": ["tvdb:12345", "weekly"],
       "ignore_days": 0,
@@ -458,11 +460,11 @@ Search subscriptions with optional filtering and pagination. Each row carries en
 }
 ```
 
-`save_path` is the **alias-prefixed form** of qBittorrent's stored path (see Destinations above for the exact rules): `"<alias>"` for an exact root match, `"<alias>:<relpath>"` when nested, raw absolute path as fallback. The alias name is encoded in the prefix — agents that need it on its own (e.g. to re-pass as `qbit_subscribe.destination`) split on the first `:` and take the prefix. `last_match_date` passes through qBittorrent's native format (typically ISO 8601, version-dependent) — empty when the rule has never matched.
+`save_path` is the **alias-prefixed form** of qBittorrent's stored path (see Destinations above for the exact rules): `"<alias>"` for an exact root match, `"<alias>:<relpath>"` when nested, `"unspecified:<rest>"` when no configured alias covers the path. The alias name is encoded in the prefix — agents that need it on its own (e.g. to re-pass as `qbit_subscribe.destination`) split on the first `:` and take the prefix. `last_match_date` passes through qBittorrent's native format (typically ISO 8601, version-dependent) — empty when the rule has never matched.
 
 `feed_has_error` is a plain boolean. qBittorrent's RSS API does not expose a companion error-message string on the `/api/v2/rss/items` response, so the **reason** for a feed error cannot be surfaced through this tool. When `feed_has_error: true`, check the qBittorrent WebUI directly to diagnose (broken URL, upstream DNS, malformed XML, etc.).
 
-`recent_items` is the **raw feed window** — the most-recent N articles emitted by the upstream RSS feed, optionally filtered by `since`. **It is not rule-filtered**: items here may or may not have passed `must_contain` / `must_not_contain` / `episode_filter`. Agents that need a "did the rule match this episode?" answer must re-evaluate the rule criteria locally over `recent_items`. A first-class `matched_items` projection would require a per-rule `/api/v2/rss/matchingArticles` upstream call (N+1 fan-out across subscriptions) and is parked under Deferred → `match_rss_articles`.
+`recent_items` is the **raw feed window** — the most-recent N articles emitted by the upstream RSS feed, optionally filtered by `since`. **It is not rule-filtered**: items here may or may not have passed `must_contain` / `must_not_contain`. Agents that need a "did the rule match this episode?" answer must re-evaluate the rule criteria locally over `recent_items`. A first-class `matched_items` projection would require a per-rule `/api/v2/rss/matchingArticles` upstream call (N+1 fan-out across subscriptions) and is parked under Deferred → `match_rss_articles`.
 
 `recent_items` is omitted entirely when `include_recent_items: false`; `link` prefers the magnet/torrent URL over the article's HTML link.
 
@@ -476,11 +478,9 @@ Atomic upsert. Creates (or replaces) the feed at the synthetic path and the rule
 {
   "name": "kura-show-12345",
   "feed_url": "https://dmhy.example/rss?id=12345",
-  "must_contain": "1080p",
+  "must_contain": "1080p.*- (0[4-9]|[1-9][0-9])($| )",
   "must_not_contain": "VOSTFR|RAW",
-  "use_regex": false,
-  "episode_filter": "1x4-;",
-  "smart_filter": false,
+  "use_regex": true,
   "destination": "kura-inbox",
   "tags": ["tvdb:12345", "weekly"],
   "ignore_days": 0,
@@ -495,18 +495,18 @@ Filter fields (all pass through to qBittorrent's auto-download rule):
 
 - `must_contain` — substring (or regex when `use_regex: true`) that the feed-item title must match.
 - `must_not_contain` — substring (or regex) that excludes a feed item. Applied after `must_contain`.
-- `use_regex` — treat both `must_contain` and `must_not_contain` as Perl-style regex.
-- `episode_filter` — qBittorrent's episode-filter syntax. The trailing `;` is the expression terminator; the dash inside an expression is what marks ranges. Forms:
-    - `1x3;` — single episode S01E03 only
-    - `1x3-5;` — closed range S01E03–S01E05 (both inclusive)
-    - `1x3-;` — open-ended range S01E03 onward (explicit trailing dash)
-    - `1x;` — every episode of season 1
-    - `1x3-;2x;` — multiple expressions joined with `;`; this one means "S01E03 onward plus all of season 2"
-
-  Omit (or pass empty string) for no episode constraint. Common subscription use: an agent subscribes to a show mid-season after the user watched earlier episodes elsewhere — `episode_filter: "1x4-;"` then auto-downloads only E4 onward.
-- `smart_filter` — qBittorrent's deduplicating filter. When `true`, suppresses re-matches of an episode already added by this rule (handles common cases like a re-encode appearing days later). Off by default.
+- `use_regex` — treat both `must_contain` and `must_not_contain` as Perl-style regex. Recommended `true` for anime feeds — see the note below.
 - `ignore_days` — cool-down in days between matches against the same feed item. `0` disables.
 - `add_paused` — when `true`, matched downloads start paused. Useful for review-before-download workflows; otherwise leave `false`.
+
+**Why no `episode_filter` / `smart_filter`**: qBittorrent's native episode-filter and smart-filter both rely on its release-title parser, which expects Scene-style `S01E03` / `1x03` tokens. Anime trackers (DMHY, Erai-raws, etc.) emit free-form titles like `[Erai-raws] Made in Abyss - 03 [1080p]` or `第03話` — qBit's parser doesn't tokenize either, so both filters end up being no-ops on the feeds this surface targets. Use `must_contain` with `use_regex: true` instead. Worked examples:
+
+- **Subscribe from E4 onward** (`- 04`, `- 05`, …): `must_contain: "- (0[4-9]|[1-9][0-9])($| )"`, `use_regex: true`.
+- **Subscribe to a single episode** (`- 12`): `must_contain: "- 12($| )"`, `use_regex: true`.
+- **Skip a known-bad group**: `must_not_contain: "BadGroup|RAW"`, `use_regex: true`.
+- **Japanese-style episode markers** (`第03話`): `must_contain: "第(0?[4-9]|[1-9][0-9])話"`, `use_regex: true`.
+
+For episode-level dedup (the smart-filter use case), the design assumption is that the agent will subscribe to the queue-event stream (planned, not yet shipped — see Deferred) and handle dedup / intervention at add/complete time. The rule stays permissive; the agent decides.
 
 **Output:** `{ "ok": true }`.
 
@@ -524,8 +524,11 @@ Removes the rule. The synthetic feed is removed too unless another subscription 
 
 - `update_downloads` — mid-life metadata edits (destination, tags, name). Dropped because everything is set at `qbit_add_download` time; metadata churn isn't an agent workflow. Re-add as one commit if a real need surfaces.
 - `pause_downloads` / `resume_downloads` — operator concern (maintenance windows, bandwidth scheduling), not agent workflow. Re-add if a workflow surfaces.
-- `get_download` — folded into `qbit_search_downloads` via `include_fields=["all", "trackers", "files"]` with single-hash selection.
+- `get_download` — folded into `qbit_search_downloads` via `include_fields=["all", "trackers", "files"]` with a single-hash query.
 - `recheck_torrents` — rare workflow; add when there is demand.
+- Download projection fields previously offered but dropped because no agent workflow used them: `download_path` (only meaningful with qBit's separate-incomplete-dir option), `auto_tmm` (forced false on every add by design), `sequential` and `first_last_piece_prio` (video-streaming optimizations), `force_start` and `super_seeding` (operator-level queue / seeding knobs), `ratio_limit` and `seeding_time_limit` (operator-set caps). Each is a one-line setter restore in `downloadFieldSetters` if a real workflow surfaces.
+- Subscription filter fields previously offered but dropped: `episode_filter` and `smart_filter`. Both rely on qBittorrent's release-title parser (Scene-style `SxxEyy`), which doesn't tokenize anime feed titles. `must_contain` with `use_regex: true` covers the same intent on the surfaces this server targets. Restore if a Scene-naming-compliant feed becomes part of the workflow.
+- Queue event stream — push notifications to the agent on `add`/`complete`/`error` events, so the agent can intervene at the moment a download lands rather than polling `qbit_search_downloads`. This shifts the design weight away from rule-side filtering (which is why `episode_filter`/`smart_filter` are gone) toward agent-side reaction. qBittorrent exposes this via `/api/v2/sync/maindata` polling; an MCP `notifications/*` channel could surface it. Not in v1 because it requires the server to hold a long-lived connection per agent.
 - Surface for multi-rule-per-feed — subscriptions are one-rule-per-feed at the API level. The underlying model still permits N rules per feed (two subscriptions sharing a `feed_url` get there transparently via the URL-hash dedupe), so the real gap is exposing a single subscription with multiple rule profiles. Re-add only if a workflow needs it.
 - Retroactive retag of existing matched downloads — requires an `update_downloads` tool (also deferred). Forward-only retag on the rule itself is already supported via `qbit_subscribe`.
 - `match_rss_articles` — preview which feed items a rule matches. Useful for rule debugging; agents rarely need it.

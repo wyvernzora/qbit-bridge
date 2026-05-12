@@ -35,7 +35,7 @@ func registerDownloads(s *mcpsdk.Server, client *qbt.Client, resolver *savepath.
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
 			Name:        "qbit_search_downloads",
-			Description: "Search downloads with filtering, sorting, and pagination. Default projection is lean (hash, name, state, progress, sizes, speeds, eta, ratio, tags, added_on). Use include_fields to opt into richer fields including save_path, magnet_uri, peer/seed counts, flags, ratio_limit, seeding_time. The special value include_fields=[\"all\"] enables every opt-in field except trackers/files. The trackers and files keys require single-hash selection (exactly one hash in hashes, no states/tags filter) to avoid N+1 fan-out. Default limit 50, max 200; paginate via offset.",
+			Description: "Search downloads with filtering, sorting, and pagination. Default projection is lean (hash, name, state, progress, sizes, speeds, eta, ratio, tags, added_on). Use include_fields to opt into richer fields: save_path, content_path, magnet_uri, peer/seed counts, total bytes, seeding_time, private. The special value include_fields=[\"all\"] expands every field-level key (but not trackers/files). The trackers and files keys trigger one additional upstream call per result hash — response size scales with len(hashes) * per-torrent fan-out, so opt in deliberately. Default limit 50, max 200; paginate via offset.",
 			Annotations: readOnlyAnnotations(),
 		},
 		wrap("qbit_search_downloads", logger, searchDownloadsHandler(client, resolver)),
@@ -51,7 +51,7 @@ func registerDownloads(s *mcpsdk.Server, client *qbt.Client, resolver *savepath.
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
 			Name:        "qbit_remove_downloads",
-			Description: "Remove downloads from qBittorrent's tracking. Pass exactly one of hashes (explicit set) or filter (states/tags). Files on disk are not deleted — file lifecycle is handled by the operator (cron, kura's trash, manual rm). This tool only forgets the download from qbit's perspective.",
+			Description: "Remove downloads from qBittorrent's tracking. Pass exactly one of hashes (explicit set, possibly empty) or filter (states/tags). An explicitly-empty hashes array is a no-op success (affected_count=0) — safe for defensive cleanup loops. Omitting BOTH hashes and filter is rejected (we refuse to guess between no-op and operate-on-every-download). Files on disk are not deleted — file lifecycle is an operator concern (cron, kura's trash, manual rm). This tool only forgets the download from qbit's perspective.",
 			Annotations: mutatingAnnotations(true),
 		},
 		wrap("qbit_remove_downloads", logger, removeDownloadsHandler(client, logger)),
@@ -67,7 +67,7 @@ type SearchDownloadsInput struct {
 	Sort          string            `json:"sort,omitempty" jsonschema:"sort order; one of name_asc, name_desc, added_on_asc, added_on_desc (default), size_asc, size_desc, progress_asc, progress_desc, dlspeed_desc, eta_asc, ratio_desc"`
 	Limit         int               `json:"limit,omitempty" jsonschema:"max downloads to return; default 50, max 200"`
 	Offset        int               `json:"offset,omitempty" jsonschema:"page offset; default 0"`
-	IncludeFields []string          `json:"include_fields,omitempty" jsonschema:"opt-in fields. lean defaults to none. valid: save_path, content_path, download_path, magnet_uri, completion_on, last_activity, total_uploaded, total_downloaded, total_size, seeds, seeds_incomplete, peers, tracker_count, auto_tmm, sequential, force_start, super_seeding, first_last_piece_prio, ratio_limit, seeding_time, seeding_time_limit, private, trackers, files. Special value 'all' expands to every field except trackers/files. trackers and files require single-hash selection."`
+	IncludeFields []string          `json:"include_fields,omitempty" jsonschema:"opt-in fields. lean defaults to none. valid: save_path, content_path, magnet_uri, completion_on, last_activity, total_uploaded, total_downloaded, total_size, seeds, seeds_incomplete, peers, tracker_count, seeding_time, private, trackers, files. Special value 'all' expands every field-level key except trackers/files. trackers and files trigger one additional upstream call per result; response size scales with hashes * per-torrent fan-out."`
 }
 
 type SearchDownloadsOutput struct {
@@ -113,28 +113,20 @@ type downloadFieldSetter func(out *Download, t qbt.Torrent)
 // per-hash upstream calls in the handler itself, gated on single-hash
 // selection.
 var downloadFieldSetters = map[string]downloadFieldSetter{
-	"save_path":             func(out *Download, t qbt.Torrent) { out.SavePath = t.SavePath },
-	"content_path":          func(out *Download, t qbt.Torrent) { out.ContentPath = t.ContentPath },
-	"download_path":         func(out *Download, t qbt.Torrent) { out.DownloadPath = t.DownloadPath },
-	"magnet_uri":            func(out *Download, t qbt.Torrent) { out.MagnetURI = t.MagnetURI },
-	"completion_on":         func(out *Download, t qbt.Torrent) { out.CompletionOn = t.CompletionOn },
-	"last_activity":         func(out *Download, t qbt.Torrent) { out.LastActivity = t.LastActivity },
-	"total_uploaded":        func(out *Download, t qbt.Torrent) { out.TotalUploaded = t.Uploaded },
-	"total_downloaded":      func(out *Download, t qbt.Torrent) { out.TotalDownloaded = t.Downloaded },
-	"total_size":            func(out *Download, t qbt.Torrent) { out.TotalSize = t.TotalSize },
-	"seeds":                 func(out *Download, t qbt.Torrent) { out.SeedsComplete = t.NumComplete },
-	"seeds_incomplete":      func(out *Download, t qbt.Torrent) { out.SeedsIncomplete = t.NumIncomplete },
-	"peers":                 func(out *Download, t qbt.Torrent) { out.PeersConnected = t.NumSeeds + t.NumLeechs },
-	"tracker_count":         func(out *Download, t qbt.Torrent) { out.TrackerCount = t.TrackersCount },
-	"auto_tmm":              func(out *Download, t qbt.Torrent) { v := t.AutoManaged; out.AutoTMM = &v },
-	"sequential":            func(out *Download, t qbt.Torrent) { v := t.SequentialDownload; out.Sequential = &v },
-	"force_start":           func(out *Download, t qbt.Torrent) { v := t.ForceStart; out.ForceStart = &v },
-	"super_seeding":         func(out *Download, t qbt.Torrent) { v := t.SuperSeeding; out.SuperSeeding = &v },
-	"first_last_piece_prio": func(out *Download, t qbt.Torrent) { v := t.FirstLastPiecePrio; out.FirstLastPiecePrio = &v },
-	"ratio_limit":           func(out *Download, t qbt.Torrent) { out.RatioLimit = t.RatioLimit },
-	"seeding_time":          func(out *Download, t qbt.Torrent) { out.SeedingTime = t.SeedingTime },
-	"seeding_time_limit":    func(out *Download, t qbt.Torrent) { out.SeedingTimeLimit = t.SeedingTimeLimit },
-	"private":               func(out *Download, t qbt.Torrent) { v := t.Private; out.Private = &v },
+	"save_path":        func(out *Download, t qbt.Torrent) { out.SavePath = t.SavePath },
+	"content_path":     func(out *Download, t qbt.Torrent) { out.ContentPath = t.ContentPath },
+	"magnet_uri":       func(out *Download, t qbt.Torrent) { out.MagnetURI = t.MagnetURI },
+	"completion_on":    func(out *Download, t qbt.Torrent) { out.CompletionOn = t.CompletionOn },
+	"last_activity":    func(out *Download, t qbt.Torrent) { out.LastActivity = t.LastActivity },
+	"total_uploaded":   func(out *Download, t qbt.Torrent) { out.TotalUploaded = t.Uploaded },
+	"total_downloaded": func(out *Download, t qbt.Torrent) { out.TotalDownloaded = t.Downloaded },
+	"total_size":       func(out *Download, t qbt.Torrent) { out.TotalSize = t.TotalSize },
+	"seeds":            func(out *Download, t qbt.Torrent) { out.SeedsComplete = t.NumComplete },
+	"seeds_incomplete": func(out *Download, t qbt.Torrent) { out.SeedsIncomplete = t.NumIncomplete },
+	"peers":            func(out *Download, t qbt.Torrent) { out.PeersConnected = t.NumSeeds + t.NumLeechs },
+	"tracker_count":    func(out *Download, t qbt.Torrent) { out.TrackerCount = t.TrackersCount },
+	"seeding_time":     func(out *Download, t qbt.Torrent) { out.SeedingTime = t.SeedingTime },
+	"private":          func(out *Download, t qbt.Torrent) { v := t.Private; out.Private = &v },
 }
 
 // validIncludeFields holds every accepted include_fields value, including
@@ -228,22 +220,11 @@ func prepareSearchDownloads(in SearchDownloadsInput) (searchDownloadsRequest, *T
 	if terr != nil {
 		return searchDownloadsRequest{}, terr
 	}
-	if (includeSet["trackers"] || includeSet["files"]) && !isSingleHashSelection(in) {
-		return searchDownloadsRequest{}, &ToolError{
-			Code:      CodeInvalidArgument,
-			Message:   "trackers and files require single-hash selection: exactly one entry in hashes, no states or tags filter; otherwise per-hash fetches would fan out N+1 across the result set",
-			Retriable: false,
-		}
-	}
 	opts := qbt.TorrentFilterOptions{Sort: sortField, Reverse: reverse}
 	if len(in.Hashes) > 0 {
 		opts.Hashes = in.Hashes
 	}
 	return searchDownloadsRequest{opts: opts, includeSet: includeSet, limit: limit, offset: offset}, nil
-}
-
-func isSingleHashSelection(in SearchDownloadsInput) bool {
-	return len(in.Hashes) == 1 && len(in.States) == 0 && len(in.Tags) == 0
 }
 
 // filterDownloads applies the state-set and tag-glob filters that the qbit
@@ -472,9 +453,6 @@ func projectDownload(t qbt.Torrent, include map[string]bool, resolver *savepath.
 	}
 	if include["content_path"] {
 		out.ContentPath = prefixed(resolver, out.ContentPath)
-	}
-	if include["download_path"] {
-		out.DownloadPath = prefixed(resolver, out.DownloadPath)
 	}
 	return out
 }
@@ -717,35 +695,41 @@ type HashesOrFilter struct {
 
 // resolveTargets validates a HashesOrFilter selector and resolves it to a
 // concrete hash list. For the filter path it pre-fetches every download
-// and applies the same client-side filter logic list_downloads uses.
-// Returns an empty slice (not an error) when the filter resolves to zero
-// matches — caller should treat that as "no work to do" and skip the
-// upstream mutation call.
+// and applies the same client-side filter logic search_downloads uses.
+//
+// Returns an empty slice (not an error) when either selector resolves to
+// zero targets — an explicitly-empty hashes array, or a filter that
+// matches nothing. Caller short-circuits before the upstream mutation
+// and returns affected_count=0, which is the agent-friendly response
+// for defensive cleanup loops that build the hash list dynamically.
+//
+// Rejected: passing both hashes and filter, or passing neither (which
+// would be ambiguous between "operate on everything" and "agent forgot
+// to include the selector"; we refuse rather than guess).
 func resolveTargets(ctx context.Context, client *qbt.Client, sel HashesOrFilter) ([]string, *ToolError) {
-	hasHashes := len(sel.Hashes) > 0
+	// Distinguish "field was explicitly provided" from "field was
+	// absent" by checking the underlying slice/pointer for nil. An
+	// explicit empty array `[]` unmarshals to a non-nil zero-length
+	// slice; an omitted key leaves it nil.
+	hashesProvided := sel.Hashes != nil
 	hasFilter := sel.Filter != nil
 	switch {
-	case hasHashes && hasFilter:
+	case hashesProvided && hasFilter:
 		return nil, &ToolError{
 			Code:      CodeInvalidArgument,
 			Message:   "pass exactly one of hashes or filter, not both",
 			Retriable: false,
 		}
-	case !hasHashes && !hasFilter:
+	case !hashesProvided && !hasFilter:
 		return nil, &ToolError{
 			Code:      CodeInvalidArgument,
-			Message:   "pass either hashes (explicit set) or filter (states/tags); refusing to operate on every download",
-			Retriable: false,
-		}
-	case sel.Hashes != nil && len(sel.Hashes) == 0:
-		return nil, &ToolError{
-			Code:      CodeInvalidArgument,
-			Message:   "hashes is empty; refusing to operate on every download",
+			Message:   "pass either hashes (explicit set, possibly empty) or filter (states/tags); refusing to operate on every download",
 			Retriable: false,
 		}
 	}
 
-	if hasHashes {
+	if hashesProvided {
+		// May be empty — caller treats as no-op.
 		return sel.Hashes, nil
 	}
 
