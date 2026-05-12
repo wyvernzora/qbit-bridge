@@ -309,9 +309,17 @@ qbit-mcp/<first-16-hex-chars-of-sha256(feed_url)>
 
 Subscriptions that share the same `feed_url` therefore collide on the same feed path — qBittorrent stores the feed once and both rules reference it. Delete-subscription only removes the underlying feed when no other subscription still references it. Agents never see or manage qbit's RSS folder tree directly.
 
-### Tags are creation-time
+`feed_url` is the literal dedupe key — `https://x.com/feed` and `https://x.com/feed/` hash differently. qbit-mcp does **not** normalize URLs (trailing slashes, query-param order, case in the path) because query-bearing feeds (dmhy and similar) are sensitive to exact form. Callers are responsible for using a consistent URL across subscriptions they intend to dedupe.
 
-Tags applied to auto-added downloads are set on the rule at creation and cannot be edited mid-life — qBittorrent's rule API has no `assignedTags` field, so retagging would require dropping every existing match. Re-create the subscription to change tags.
+Changing `feed_url` on an existing subscription via `set_subscription` is rejected (`invalid_argument`). Delete and re-create the subscription instead — silent feed-path migration would orphan the old synthetic feed.
+
+### Tags
+
+`tags` is required on every `set_subscription` call. Editing tags on replace re-tags **future** auto-added downloads only; matches already in qBittorrent keep their original tags. Retroactive retag of existing downloads is out of scope (would require an `update_downloads` tool, currently deferred). If you need to retag historical matches, `list_downloads` + manual qBittorrent action handles it.
+
+### Upstream cost
+
+`list_subscriptions` always pulls feed contents from qBittorrent regardless of `include_recent_items`, because `last_match_date` and `match_count` are computed from item metadata. The `include_recent_items` flag controls **response payload** size to the caller, not the upstream call cost.
 
 ### `list_subscriptions`
 
@@ -387,7 +395,7 @@ Atomic upsert. Creates (or replaces) the feed at the synthetic path and the rule
 }
 ```
 
-`name` is the unique key (doubles as the qBittorrent rule name). `feed_url` is required. Other rule fields are optional pointers: omitted fields keep their defaults on create / current values on replace. Tags are required at creation; passing a different `tags` array on replace re-sets them on the rule but does not retag already-matched downloads.
+`name` is the unique key (doubles as the qBittorrent rule name). `feed_url` is required and immutable for the lifetime of the subscription — passing a different value on replace returns `invalid_argument` (delete and re-create instead). `tags` is required on every call; passing a different array on replace re-tags future matches only and leaves existing matches untouched. Other rule fields are optional pointers: omitted fields keep their defaults on create / current values on replace.
 
 **Output:** `{ "ok": true }`.
 
@@ -407,8 +415,8 @@ Removes the rule. The synthetic feed is removed too unless another subscription 
 - `pause_downloads` / `resume_downloads` — operator concern (maintenance windows, bandwidth scheduling), not agent workflow. Re-add if a workflow surfaces.
 - `get_download` — folded into `list_downloads` via `include_fields=["all", "trackers", "files"]` with single-hash selection.
 - `recheck_torrents` — rare workflow; add when there is demand.
-- Multi-rule-per-feed — subscriptions are one-rule-per-feed by design (feed identity is derived from the URL hash). qBittorrent's underlying model permits N rules per feed; re-add a surface for it only if a real workflow needs the same RSS pulled with different filters.
-- Mid-life retag of subscription matches — qBittorrent's rule API has no `assignedTags` editor on existing matches; re-create the subscription instead.
+- Surface for multi-rule-per-feed — subscriptions are one-rule-per-feed at the API level. The underlying model still permits N rules per feed (two subscriptions sharing a `feed_url` get there transparently via the URL-hash dedupe), so the real gap is exposing a single subscription with multiple rule profiles. Re-add only if a workflow needs it.
+- Retroactive retag of existing matched downloads — requires an `update_downloads` tool (also deferred). Forward-only retag on the rule itself is already supported via `set_subscription`.
 - `match_rss_articles` — preview which feed items a rule matches. Useful for rule debugging; agents rarely need it.
 - `set_rss_settings` — global auto-download / processing toggles. Owner sets these in the qBittorrent UI.
 - Raw RSS folder-tree management — qbit-mcp synthesizes feed paths under `qbit-mcp/<hash>`. Other folders in qbit's RSS tree are left untouched but not navigable through this surface.

@@ -37,7 +37,7 @@ func registerSubscriptions(s *mcpsdk.Server, client *qbt.Client, resolver *savep
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
 			Name:        "set_subscription",
-			Description: "Upsert a subscription by name. Atomically creates (or replaces) the qBittorrent feed and the auto-download rule pointing at it. The feed_url is the only feed-side input; qbit-mcp derives a synthetic feed path under 'qbit-mcp/<hash>' so duplicate feed_urls across subscriptions share storage transparently. tags are applied to every download the rule auto-adds and cannot be edited later — re-create the subscription to change them. " + destHint,
+			Description: "Upsert a subscription by name. Atomically creates (or replaces) the qBittorrent feed and the auto-download rule pointing at it. The feed_url is the only feed-side input; qbit-mcp derives a synthetic feed path under 'qbit-mcp/<hash>' so duplicate feed_urls across subscriptions share storage transparently. Changing feed_url on an existing subscription is rejected — delete and re-create instead. tags is required on every call; passing a different tags array on replace re-tags FUTURE auto-added downloads only (existing matches keep their original tags — retroactive retag is out of scope). " + destHint,
 			Annotations: mutatingAnnotations(false),
 		},
 		wrap("set_subscription", logger, setSubscriptionHandler(client, resolver, logger)),
@@ -121,7 +121,7 @@ type SetSubscriptionInput struct {
 	EpisodeFilter  *string  `json:"episode_filter,omitempty" jsonschema:"qBittorrent episode-filter expression, e.g. '1x2;'."`
 	SmartFilter    *bool    `json:"smart_filter,omitempty" jsonschema:"qBittorrent's deduplicating smart filter."`
 	Destination    string   `json:"destination,omitempty" jsonschema:"save-destination alias name for matched downloads. Empty inherits qBittorrent's account default."`
-	Tags           []string `json:"tags,omitempty" jsonschema:"tags to apply to every download the rule auto-adds. Set at creation only; re-create the subscription to change them."`
+	Tags           []string `json:"tags" jsonschema:"tags applied to every download the rule auto-adds. Required on every call. Editing on replace re-tags future matches only; existing matches keep their original tags."`
 	IgnoreDays     *int     `json:"ignore_days,omitempty" jsonschema:"cool-down days between matches."`
 	AddPaused      *bool    `json:"add_paused,omitempty" jsonschema:"add matched downloads in paused state."`
 }
