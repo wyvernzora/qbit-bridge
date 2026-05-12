@@ -19,7 +19,7 @@ type internalHandler[I, O any] func(ctx context.Context, in I) (O, *ToolError)
 // Register adds all qBittorrent tools to the given server. The tool surface
 // is split by domain — see internal/mcp/tools_downloads.go,
 // internal/mcp/tools_tags.go, internal/mcp/tools_destinations.go, and
-// internal/mcp/tools_rss.go for the per-domain registrations.
+// internal/mcp/tools_subscriptions.go for the per-domain registrations.
 // docs/tools.md is the design spec for the whole surface.
 //
 // resolver is the deploy-time destination alias map; tool handlers that
@@ -29,7 +29,7 @@ func Register(s *mcpsdk.Server, client *qbt.Client, resolver *savepath.Resolver,
 	registerDownloads(s, client, resolver, logger)
 	registerTags(s, client, resolver, logger)
 	registerDestinations(s, client, resolver, logger)
-	registerRSS(s, client, resolver, logger)
+	registerSubscriptions(s, client, resolver, logger)
 }
 
 // wrap adapts an internalHandler into the SDK signature. It records logging
@@ -85,7 +85,7 @@ func readOnlyAnnotations() *mcpsdk.ToolAnnotations {
 }
 
 // mutatingAnnotations is the preset for tools that mutate qBittorrent state
-// (add_*, remove_*, set_rss_rule, …). DestructiveHint is true only on the
+// (add_*, remove_*, set_subscription, …). DestructiveHint is true only on the
 // actually-destructive ops (remove_*); the rest are non-destructive
 // mutations.
 //

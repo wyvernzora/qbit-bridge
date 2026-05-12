@@ -1,6 +1,6 @@
 # Tool surface
 
-Design spec for the MCP tools `qbit-mcp` exposes. Eleven tools across four groups: downloads (3), tags (1), destinations (1), RSS (6).
+Design spec for the MCP tools `qbit-mcp` exposes. Eight tools across four groups: downloads (3), tags (1), destinations (1), subscriptions (3).
 
 Design priorities:
 
@@ -15,7 +15,7 @@ Design priorities:
 
 ### Destinations (save-path aliases)
 
-Tools that direct download storage (`add_download`, `set_rss_rule`) **do not accept arbitrary filesystem paths**. Callers pass the *name* of a deploy-time-configured alias via a `destination` (or `set_destination`) field; the server resolves the name to a path before calling qBittorrent. Untrusted agents cannot redirect download storage outside the configured set.
+Tools that direct download storage (`add_download`, `set_subscription`) **do not accept arbitrary filesystem paths**. Callers pass the *name* of a deploy-time-configured alias via a `destination` (or `set_destination`) field; the server resolves the name to a path before calling qBittorrent. Untrusted agents cannot redirect download storage outside the configured set.
 
 The operator declares aliases at boot time via `--save-paths` / `QBITTORRENT_SAVE_PATHS`:
 
@@ -287,48 +287,76 @@ Read the deploy-time-configured save-path aliases. No upstream call — the map 
 }
 ```
 
-`name` is the value to pass on `add_download.destination` / `set_rss_rule.destination`. `path` is the resolved absolute filesystem path qBittorrent will see — useful for reverse-lookups from a raw `save_path` observed on a Download output.
+`name` is the value to pass on `add_download.destination` / `set_subscription.destination`. `path` is the resolved absolute filesystem path qBittorrent will see — useful for reverse-lookups from a raw `save_path` observed on a Download output.
 
 Returns an empty array when no aliases are configured. Names are sorted alphabetically.
 
 ---
 
-## RSS tools
+## Subscription tools
+
+A subscription bundles an RSS feed and the auto-download rule that filters its items into actual downloads. qBittorrent's native model has two separate layers (feeds, rules); qbit-mcp fuses them so agents work with one concept: "watch this URL, add matches to this destination with these tags."
 
 qBittorrent's RSS endpoints (`/api/v2/rss/*`) are not implemented by `github.com/autobrr/go-qbittorrent` as of v1.15.0. qbit-mcp reaches them via `client.GetHTTPClient()` and the configured `--qb-url`. The wrapper lives under `internal/qbtrss/` and is the only place in qbit-mcp that talks to qBittorrent without going through the SDK. Tracking issue: TODO file upstream.
 
-Paths are flattened: `"Anime/Erai-raws/Erai-raws Releases"` is one feed inside two nested folders. Add/remove operations split the path internally; agents work with flat strings.
+### Feed identity
 
-### `list_rss`
+`feed_url` is the only feed-side input on `set_subscription`. qbit-mcp derives the synthetic qBittorrent feed path as:
 
-Feeds and folders. Items are omitted by default.
+```
+qbit-mcp/<first-16-hex-chars-of-sha256(feed_url)>
+```
+
+Subscriptions that share the same `feed_url` therefore collide on the same feed path — qBittorrent stores the feed once and both rules reference it. Delete-subscription only removes the underlying feed when no other subscription still references it. Agents never see or manage qbit's RSS folder tree directly.
+
+### Tags are creation-time
+
+Tags applied to auto-added downloads are set on the rule at creation and cannot be edited mid-life — qBittorrent's rule API has no `assignedTags` field, so retagging would require dropping every existing match. Re-create the subscription to change tags.
+
+### `list_subscriptions`
+
+Read all subscriptions. Each row carries enough state to identify the subscription, its filter, and its recent activity. Items are summary-only (last_match_date + match_count) by default; set `include_recent_items=true` to embed the most-recent items.
 
 **Input:**
 
 ```json
 {
-  "include_items": false,   // default false; large feeds carry hundreds of items
-  "since": "2026-05-01T00:00:00Z"   // optional; RFC3339; only items newer when include_items=true
+  "include_recent_items": false,
+  "recent_items_limit": 10,
+  "since": "2026-05-01T00:00:00Z"
 }
 ```
+
+`recent_items_limit` default 10, max 50. `since` is RFC3339 and only applies when `include_recent_items=true`.
 
 **Output:**
 
 ```json
 {
-  "feeds": [
+  "subscriptions": [
     {
-      "path": "Anime/Erai-raws/Erai-raws Releases",
-      "url": "https://example.com/rss",
-      "has_error": false,
-      "last_build_date": "2026-05-11T12:00:00Z",
-      "item_count": 124,
-      "items": [
+      "name": "kura-show-12345",
+      "feed_url": "https://dmhy.example/rss?id=12345",
+      "enabled": true,
+      "must_contain": "1080p",
+      "must_not_contain": "VOSTFR",
+      "use_regex": false,
+      "episode_filter": "1x2;",
+      "smart_filter": false,
+      "destination": "kura-inbox",
+      "save_path": "/mnt/kura",
+      "tags": ["tvdb:12345", "weekly"],
+      "ignore_days": 0,
+      "add_paused": false,
+      "feed_has_error": false,
+      "last_match_date": "2026-05-10T18:24:00Z",
+      "match_count": 7,
+      "recent_items": [
         {
           "title": "[Erai-raws] Show - 03",
           "link": "magnet:?xt=urn:btih:...",
-          "pub_date": "2026-05-11T12:00:00Z",
-          "matching_rule": "anime-weekly"
+          "pub_date": "2026-05-10T18:24:00Z",
+          "matching_rule": "kura-show-12345"
         }
       ]
     }
@@ -336,61 +364,40 @@ Feeds and folders. Items are omitted by default.
 }
 ```
 
-`items` is omitted entirely when `include_items: false`. `matching_rule` is `null` when no rule matches that item.
+`save_path` is qBittorrent's raw path (truth on the way out). `destination` is the reverse-resolved alias name when one matches; empty when the raw `save_path` does not correspond to a configured alias. `recent_items` is omitted entirely when `include_recent_items: false`.
 
-### `add_rss_feed`
+### `set_subscription`
 
-**Input:** `url`, `path`.
+Atomic upsert. Creates (or replaces) the feed at the synthetic path and the rule that points at it.
 
-**Output:** `{ "ok": true }`.
-
-### `remove_rss_item`
-
-Remove a feed or folder. qBittorrent uses the same endpoint for both.
-
-**Input:** `path`.
-
-**Output:** `{ "ok": true }`.
-
-### `list_rss_rules`
-
-Auto-download rules.
-
-**Output:**
+**Input:**
 
 ```json
 {
-  "rules": [
-    {
-      "name": "anime-weekly",
-      "enabled": true,
-      "must_contain": "1080p",
-      "must_not_contain": "VOSTFR",
-      "use_regex": false,
-      "episode_filter": "1x2;",
-      "smart_filter": false,
-      "affected_feeds": ["Anime/Erai-raws/Erai-raws Releases"],
-      "save_path": "/data/anime",
-      "ignore_days": 0,
-      "add_paused": false
-    }
-  ]
+  "name": "kura-show-12345",
+  "feed_url": "https://dmhy.example/rss?id=12345",
+  "must_contain": "1080p",
+  "use_regex": false,
+  "episode_filter": "1x2;",
+  "destination": "kura-inbox",
+  "tags": ["tvdb:12345", "weekly"],
+  "ignore_days": 0,
+  "add_paused": false,
+  "enabled": true
 }
 ```
 
-### `set_rss_rule`
-
-Create or replace a rule by name. qBittorrent's `setRule` is upsert semantics — same payload either way.
-
-**Input:** `name`, plus any of the rule fields above (omitted fields keep their defaults on create / current values on edit). `affected_feeds` is an array of full flat feed paths. `destination` (alias name) replaces the raw `save_path` field for matched-download overrides.
+`name` is the unique key (doubles as the qBittorrent rule name). `feed_url` is required. Other rule fields are optional pointers: omitted fields keep their defaults on create / current values on replace. Tags are required at creation; passing a different `tags` array on replace re-sets them on the rule but does not retag already-matched downloads.
 
 **Output:** `{ "ok": true }`.
 
-### `delete_rss_rule`
+### `delete_subscription`
 
-**Input:** `name`.
+**Input:** `{ "name": "kura-show-12345" }`.
 
 **Output:** `{ "ok": true }`.
+
+Removes the rule. The synthetic feed is removed too unless another subscription still references the same `feed_url`.
 
 ---
 
@@ -400,8 +407,11 @@ Create or replace a rule by name. qBittorrent's `setRule` is upsert semantics �
 - `pause_downloads` / `resume_downloads` — operator concern (maintenance windows, bandwidth scheduling), not agent workflow. Re-add if a workflow surfaces.
 - `get_download` — folded into `list_downloads` via `include_fields=["all", "trackers", "files"]` with single-hash selection.
 - `recheck_torrents` — rare workflow; add when there is demand.
+- Multi-rule-per-feed — subscriptions are one-rule-per-feed by design (feed identity is derived from the URL hash). qBittorrent's underlying model permits N rules per feed; re-add a surface for it only if a real workflow needs the same RSS pulled with different filters.
+- Mid-life retag of subscription matches — qBittorrent's rule API has no `assignedTags` editor on existing matches; re-create the subscription instead.
 - `match_rss_articles` — preview which feed items a rule matches. Useful for rule debugging; agents rarely need it.
 - `set_rss_settings` — global auto-download / processing toggles. Owner sets these in the qBittorrent UI.
+- Raw RSS folder-tree management — qbit-mcp synthesizes feed paths under `qbit-mcp/<hash>`. Other folders in qbit's RSS tree are left untouched but not navigable through this surface.
 - `set_torrent_speed_limits`, `set_torrent_share_limit` — agent-uncommon power-user knobs.
 - `recheck`, `reannounce`, `set_force_start`, `set_super_seeding` — download-level toggles that complicate the v1 surface without a clear workflow story.
 - Download file upload (raw bytes) — magnet URIs cover the agentic flow we ship dmhy-mcp + qbit-mcp for.
@@ -416,13 +426,12 @@ These all map cleanly onto the established `internalHandler` + `wrap` pattern; a
 
 | Component | Approx tokens |
 |---|---|
-| Tool list (11 names + descriptions) loaded per turn | 0.9k – 1.1k |
+| Tool list (8 names + descriptions) loaded per turn | 0.7k – 0.9k |
 | `list_downloads` default response, 50 downloads | 3.5k – 4.5k |
 | `list_downloads` default response, 10 downloads | 0.7k – 1.0k |
 | `list_downloads` single-hash with `include_fields=["all"]` (no trackers/files) | 0.3k |
 | `list_downloads` single-hash with `include_fields=["all","trackers","files"]` on a typical anime release | 1.0k – 2.0k |
-| `list_rss` without items | 0.2k per 10 feeds |
-| `list_rss` with items, since=last week | scales with item count; cap by `since` |
-| `list_rss_rules` | 0.1k per rule |
+| `list_subscriptions` summary-only | 0.2k per 5 subscriptions |
+| `list_subscriptions` with `include_recent_items=true`, default limit | 0.5k – 1.0k per subscription |
 
 Rule of thumb: a download-aware agent that lists 20 active downloads and inspects one in detail eats ~2.5k tokens per probe loop. Comfortable budget at modern context sizes; would not be on smaller models.

@@ -14,13 +14,13 @@ import (
 //
 // The tool reads from the deploy-time-configured savepath resolver only;
 // no upstream qBittorrent call is involved. client is accepted to keep
-// the registrar signature uniform with the download / tag / RSS
+// the registrar signature uniform with the download / tag / subscription
 // registrars.
 func registerDestinations(s *mcpsdk.Server, _ *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger) {
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
 			Name:        "list_destinations",
-			Description: "List the deploy-time-configured save destinations. Each entry is an alias name (used as the `destination` value on add_download and set_rss_rule) paired with the absolute filesystem path it resolves to. Agents that observed a raw save_path on a Download output can reverse-look it up here to find the matching alias name. The list is fixed for the lifetime of the qbit-mcp process; restart with a different --save-paths to change it.",
+			Description: "List the deploy-time-configured save destinations. Each entry is an alias name (used as the `destination` value on add_download and set_subscription) paired with the absolute filesystem path it resolves to. Agents that observed a raw save_path on a Download output can reverse-look it up here to find the matching alias name. The list is fixed for the lifetime of the qbit-mcp process; restart with a different --save-paths to change it.",
 			Annotations: readOnlyAnnotations(),
 		},
 		wrap("list_destinations", logger, listDestinationsHandler(resolver)),

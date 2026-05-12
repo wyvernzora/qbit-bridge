@@ -2,7 +2,7 @@
 // filesystem paths.
 //
 // MCP tools that accept a save-path input (add_download, update_downloads,
-// set_rss_rule) take an alias *name* — "kura-inbox", "general-downloads" —
+// set_subscription) take an alias *name* — "kura-inbox", "general-downloads" —
 // not a raw filesystem path. The operator declares the alias→path mapping
 // at deploy time via --save-paths / QBITTORRENT_SAVE_PATHS, and the server
 // rejects any name not on that list. Untrusted agents cannot redirect

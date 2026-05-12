@@ -33,7 +33,7 @@ const (
 
 // New constructs the MCP server with all qBittorrent tools registered.
 // resolver is consulted by every tool that takes a destination input
-// (add_download, update_downloads, set_rss_rule) so callers pick from a
+// (add_download, set_subscription) so callers pick from a
 // deploy-time-configured list of named paths instead of supplying
 // arbitrary filesystem paths.
 func New(client *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger, version string) *mcpsdk.Server {

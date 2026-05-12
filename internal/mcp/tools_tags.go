@@ -14,7 +14,7 @@ import (
 // via add_download.tags, so there is no create_tag tool.
 //
 // resolver is accepted to keep the registrar signature uniform with the
-// download and RSS registrars; tag tools do not read it.
+// download and subscription registrars; tag tools do not read it.
 func registerTags(s *mcpsdk.Server, client *qbt.Client, _ *savepath.Resolver, logger *slog.Logger) {
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
