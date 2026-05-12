@@ -613,8 +613,16 @@ const (
 	validMagnetHash = "aabbccddeeffaabbccddeeffaabbccddeeffaabb"
 )
 
+// addRouteOK wires the upstream routes the idempotent add path touches:
+//   - /api/v2/torrents/info — idempotent pre-check; empty body so the
+//     handler treats every test hash as "not yet present" and proceeds to
+//     the upstream add call.
+//   - /api/v2/torrents/add  — the actual add, always "Ok." in tests.
 func addRouteOK() map[string]mockRoute {
-	return map[string]mockRoute{"/api/v2/torrents/add": {body: "Ok."}}
+	return map[string]mockRoute{
+		"/api/v2/torrents/info": {body: "[]"},
+		"/api/v2/torrents/add":  {body: "Ok."},
+	}
 }
 
 func TestAddDownload_SuccessReturnsHashLowercase(t *testing.T) {
@@ -782,6 +790,80 @@ func TestAddDownload_Upstream403(t *testing.T) {
 	_, terr := callAddDownload(t, client, mustResolver(t, ""), AddDownloadInput{Magnet: validMagnet})
 	if terr == nil || terr.Code != CodeUpstreamForbidden {
 		t.Errorf("err = %+v", terr)
+	}
+}
+
+func TestAddDownload_SuccessFlagsAlreadyExistedFalse(t *testing.T) {
+	client, _ := newQbitMockRoutes(t, addRouteOK())
+	out, terr := callAddDownload(t, client, mustResolver(t, ""), AddDownloadInput{Magnet: validMagnet})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	if out.AlreadyExisted {
+		t.Error("already_existed should be false for a fresh add")
+	}
+}
+
+func TestAddDownload_IdempotentSkipsUpstreamWhenHashPresent(t *testing.T) {
+	// /info returns a single torrent matching the magnet hash, so the
+	// handler should skip the /add call entirely and report
+	// already_existed=true.
+	existing := `[{"hash":"` + validMagnetHash + `","name":"prior","state":"downloading"}]`
+	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/torrents/info": {body: existing},
+		"/api/v2/torrents/add":  {body: "Ok."},
+	})
+	out, terr := callAddDownload(t, client, mustResolver(t, ""), AddDownloadInput{Magnet: validMagnet})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	if !out.AlreadyExisted {
+		t.Error("already_existed should be true when hash is already present")
+	}
+	if !out.Accepted {
+		t.Error("accepted should still be true on the idempotent path")
+	}
+	if out.Hash != validMagnetHash {
+		t.Errorf("hash = %q, want %q", out.Hash, validMagnetHash)
+	}
+	if captured["/api/v2/torrents/add"].Method != "" {
+		t.Error("upstream /torrents/add should not be called when the hash is already present")
+	}
+}
+
+func TestAddDownload_IdempotentAuditLogsAlreadyExisted(t *testing.T) {
+	existing := `[{"hash":"` + validMagnetHash + `","name":"prior","state":"downloading"}]`
+	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/torrents/info": {body: existing},
+		"/api/v2/torrents/add":  {body: "Ok."},
+	})
+	buf, logger := bufferedLogger()
+	h := addDownloadHandler(client, mustResolver(t, ""), logger)
+	if _, terr := h(context.Background(), AddDownloadInput{Magnet: validMagnet}); terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	logOut := buf.String()
+	if !strings.Contains(logOut, "audit=true") || !strings.Contains(logOut, "action=add") {
+		t.Errorf("audit record not emitted: %s", logOut)
+	}
+	if !strings.Contains(logOut, "already_existed=true") {
+		t.Errorf("audit record should include already_existed=true; got: %s", logOut)
+	}
+}
+
+func TestAddDownload_PreCheckUpstreamErrorPropagates(t *testing.T) {
+	// /info returns 500; the pre-check fails, the add call must not
+	// occur, and the handler must surface upstream_unavailable.
+	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/torrents/info": {status: http.StatusInternalServerError},
+		"/api/v2/torrents/add":  {body: "Ok."},
+	})
+	_, terr := callAddDownload(t, client, mustResolver(t, ""), AddDownloadInput{Magnet: validMagnet})
+	if terr == nil || terr.Code != CodeUpstreamUnavailable {
+		t.Errorf("err = %+v, want upstream_unavailable", terr)
+	}
+	if captured["/api/v2/torrents/add"].Method != "" {
+		t.Error("upstream /torrents/add must not be called if pre-check fails")
 	}
 }
 

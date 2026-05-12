@@ -529,8 +529,9 @@ type AddDownloadInput struct {
 }
 
 type AddDownloadOutput struct {
-	Hash     string `json:"hash"`
-	Accepted bool   `json:"accepted"`
+	Hash           string `json:"hash"`
+	Accepted       bool   `json:"accepted"`
+	AlreadyExisted bool   `json:"already_existed"`
 }
 
 func addDownloadHandler(client *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger) internalHandler[AddDownloadInput, AddDownloadOutput] {
@@ -547,6 +548,29 @@ func addDownloadHandler(client *qbt.Client, resolver *savepath.Resolver, logger 
 		savePath, rerr := resolver.Resolve(in.Destination)
 		if rerr != nil {
 			return empty, &ToolError{Code: CodeInvalidArgument, Message: rerr.Error(), Retriable: false}
+		}
+
+		// Idempotent pre-check: qBittorrent's POST /torrents/add returns
+		// "Ok." even when the hash is already present, so the response
+		// alone can't distinguish "new add" from "re-add of existing
+		// download". We probe via /torrents/info?hashes=<h> before the
+		// add — if the hash is already known, we skip the upstream call
+		// entirely, leaving the live download (tags, destination,
+		// progress) untouched. The audit log carries already_existed so
+		// agents and operators can tell the noop case apart.
+		existing, err := client.GetTorrentsCtx(ctx, qbt.TorrentFilterOptions{Hashes: []string{hash}})
+		if err != nil {
+			return empty, errorFromSDK(err)
+		}
+		alreadyExisted := len(existing) > 0
+
+		auditMutation(ctx, logger, slog.LevelInfo, "add", []string{hash},
+			slog.String("destination", in.Destination),
+			slog.Any("tags", in.Tags),
+			slog.Bool("already_existed", alreadyExisted),
+		)
+		if alreadyExisted {
+			return AddDownloadOutput{Hash: hash, Accepted: true, AlreadyExisted: true}, nil
 		}
 
 		// Force autoTMM=false on every add. qBittorrent's Automatic Torrent
@@ -566,14 +590,10 @@ func addDownloadHandler(client *qbt.Client, resolver *savepath.Resolver, logger 
 			opts["rename"] = in.Rename
 		}
 
-		auditMutation(ctx, logger, slog.LevelInfo, "add", []string{hash},
-			slog.String("destination", in.Destination),
-			slog.Any("tags", in.Tags),
-		)
 		if err := client.AddTorrentFromUrlCtx(ctx, in.Magnet, opts); err != nil {
 			return empty, errorFromSDK(err)
 		}
-		return AddDownloadOutput{Hash: hash, Accepted: true}, nil
+		return AddDownloadOutput{Hash: hash, Accepted: true, AlreadyExisted: false}, nil
 	}
 }
 

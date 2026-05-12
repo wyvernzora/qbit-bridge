@@ -52,7 +52,7 @@ Severity differentiates ops so log aggregators filtering on level can surface th
 
 | Action | Level | Why |
 |---|---|---|
-| `add` | `INFO` | Reversible by `remove_downloads`. |
+| `add` | `INFO` | Reversible by `remove_downloads`. Carries `already_existed=true|false` so the idempotent re-add (skipped upstream call) is distinguishable from a fresh add. |
 | `remove` | `WARN` | Even without on-disk deletion, "qbit forgot this download" is the kind of event operators investigate when something downstream breaks. |
 
 Operators investigating "what did the agent do" can `grep audit=true` on the structured JSON stderr stream. The `hashes` field carries the full hash list so per-hash forensics work too.
@@ -206,11 +206,16 @@ Magnet hash is normalized to 40-char lowercase hex in the response — base32 ha
 ```json
 {
   "hash": "deadbeef...",
-  "accepted": true
+  "accepted": true,
+  "already_existed": false
 }
 ```
 
-`accepted: true` means qBittorrent acknowledged the add. Metadata fetch for new magnets is asynchronous in qbit; agents that need the resolved `name` should follow up with `list_downloads` filtered to the returned hash.
+`accepted: true` means qBittorrent acknowledged the add (or the hash was already present — see below). Metadata fetch for new magnets is asynchronous in qbit; agents that need the resolved `name` should follow up with `list_downloads` filtered to the returned hash.
+
+**Idempotency.** The handler pre-checks via `/torrents/info?hashes=<h>` before issuing the add. If the hash is already known to qBittorrent, the upstream add is skipped and the response carries `already_existed: true`. The live download — tags, destination, progress — is left untouched; re-add does not mutate existing torrent state. The audit record always fires (the agent's intent to add is logged either way) with an `already_existed` field so operators can tell the noop case apart.
+
+This makes retry-safe agent workflows simple: an agent that loses track of whether it already submitted a magnet can call `add_download` again without risk of duplicate adds or destination drift.
 
 ### `remove_downloads`
 
