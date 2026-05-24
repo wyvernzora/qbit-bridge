@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/autobrr/go-qbittorrent v1.15.0
-	github.com/modelcontextprotocol/go-sdk v1.6.0
+	github.com/modelcontextprotocol/go-sdk v1.6.1
 )
 
 require (
