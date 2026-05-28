@@ -3,7 +3,7 @@ module github.com/wyvernzora/qbit-bridge
 go 1.25.0
 
 require (
-	github.com/autobrr/go-qbittorrent v1.15.0
+	github.com/autobrr/go-qbittorrent v1.16.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 )
 
