@@ -29,13 +29,16 @@ func registerDestinations(s *mcpsdk.Server, _ *qbt.Client, resolver *savepath.Re
 
 // --- qbit_list_destinations ---
 
+// ListDestinationsInput has no fields because destinations are deploy-time configuration.
 type ListDestinationsInput struct{}
 
+// Destination is one configured save-path alias.
 type Destination struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
 }
 
+// ListDestinationsOutput reports every configured save-path alias.
 type ListDestinationsOutput struct {
 	Destinations []Destination `json:"destinations"`
 }

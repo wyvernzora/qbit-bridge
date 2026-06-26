@@ -1,8 +1,9 @@
-package mcp
+package downloads
 
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -159,6 +160,10 @@ func callRemoveDownloads(t *testing.T, client *qbt.Client, in RemoveDownloadsInp
 	t.Helper()
 	h := removeDownloadsHandler(client, discardLogger())
 	return h(context.Background(), in)
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func bufferedLogger() (*bytes.Buffer, *slog.Logger) {
