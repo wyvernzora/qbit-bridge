@@ -3,6 +3,10 @@
 Custom n8n node for qbit-bridge. The package is built as an init-container
 image that installs into the directory n8n reads from `N8N_CUSTOM_EXTENSIONS`.
 
+```sh
+docker pull ghcr.io/wyvernzora/qbit-bridge/n8n-nodes:latest
+```
+
 ## Node
 
 | Node | What it does |

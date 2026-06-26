@@ -18,6 +18,7 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
+  N8N_NODES_IMAGE_NAME: ghcr.io/${{ github.repository }}/n8n-nodes
 
 jobs:
   go:
@@ -69,7 +70,7 @@ jobs:
       - name: go build
         run: go build -trimpath -o bin/qbit-bridge ./cmd/qbit-bridge
 
-  # Build & push the container image to GHCR. Gated on the go job so a
+  # Build & push the container images to GHCR. Gated on the go job so a
   # red commit can't ship a poisoned :dev tag. Pull-request events skip
   # this entirely (no push, no permission to GHCR from forks).
   #
@@ -129,6 +130,23 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=MIT
 
+      - name: Compute n8n node tags + labels
+        id: n8n-meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
+        with:
+          images: ${{ env.N8N_NODES_IMAGE_NAME }}
+          tags: |
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          labels: |
+            org.opencontainers.image.title=qbit-bridge-n8n-nodes
+            org.opencontainers.image.description=n8n community nodes for qbit-bridge REST workflows
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+
       - name: Build & push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
@@ -141,6 +159,21 @@ jobs:
             VERSION=${{ steps.version.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Build & push n8n nodes
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
+        with:
+          context: .
+          file: integrations/n8n/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.n8n-meta.outputs.tags }}
+          labels: ${{ steps.n8n-meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.value }}
+          cache-from: type=gha,scope=n8n-nodes
+          cache-to: type=gha,mode=max,scope=n8n-nodes
           provenance: false
 
   # Prune untagged GHCR image versions accumulated by repeated :dev /
@@ -158,6 +191,14 @@ jobs:
         uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5
         with:
           package-name: qbit-bridge
+          package-type: container
+          delete-only-untagged-versions: 'true'
+          min-versions-to-keep: 10
+
+      - name: Delete untagged n8n node versions, keep last 10
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5
+        with:
+          package-name: qbit-bridge/n8n-nodes
           package-type: container
           delete-only-untagged-versions: 'true'
           min-versions-to-keep: 10

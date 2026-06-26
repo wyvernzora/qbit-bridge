@@ -74,6 +74,8 @@ Prebuilt images are published to GHCR on every push to `main` (as `:dev`) and on
 
 ```sh
 docker pull ghcr.io/wyvernzora/qbit-bridge:latest
+docker pull ghcr.io/wyvernzora/qbit-bridge/n8n-nodes:latest
+
 docker run --rm --network host \
   -e QBITTORRENT_URL=http://localhost:8080 \
   -e QBITTORRENT_SAVE_PATHS='kura-inbox=/mnt/kura' \
