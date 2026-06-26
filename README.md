@@ -68,6 +68,8 @@ go build ./cmd/qbit-bridge
 
 HTTP transport exposes the MCP endpoint at `/mcp`, REST downloads under `/api/v1/downloads`, and a k8s liveness probe at `/healthz`.
 
+Run `lefthook install` once to enable the pre-commit hook; `lefthook run pre-commit --all-files` mirrors the Go CI gate.
+
 ## Container
 
 Prebuilt images are published to GHCR on every push to `main` (as `:dev`) and on tag pushes (as `:vX.Y.Z` and `:latest`).

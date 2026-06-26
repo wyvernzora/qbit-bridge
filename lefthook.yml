@@ -1,0 +1,19 @@
+pre-commit:
+  parallel: false
+  commands:
+    gofmt:
+      run: |
+        drift=$(env -u GOROOT gofmt -l cmd internal)
+        if [ -n "$drift" ]; then
+          echo "gofmt drift in:" >&2
+          echo "$drift" >&2
+          exit 1
+        fi
+    go-vet:
+      run: env -u GOROOT go vet ./...
+    golangci-lint:
+      run: env -u GOROOT go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run
+    go-test:
+      run: env -u GOROOT go test -race -count=1 ./...
+    go-build:
+      run: env -u GOROOT go build -trimpath -o bin/qbit-bridge ./cmd/qbit-bridge
