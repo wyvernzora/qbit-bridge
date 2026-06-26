@@ -14,12 +14,12 @@ This file holds project-specific context, learnings, and overrides only. Rules i
 ### About qbit-bridge
 
 - **Name:** qbit-bridge.
-- **Domain:** MCP server wrapping the qBittorrent WebUI v2 API.
-- **Tools:** (none yet — scaffolding only; add tools in `internal/mcp/tools.go`).
-- **Transports:** stdio (default), streamable HTTP (`--transport=http --addr=:8080`, MCP mounted at `/mcp`).
+- **Domain:** qBittorrent automation bridge for MCP, REST, and n8n workflows.
+- **Tools:** Eight MCP tools across downloads, tags, destinations, and subscriptions (see `docs/tools.md`).
+- **Transports:** stdio (default), streamable HTTP (`--transport=http --addr=:8080`, MCP mounted at `/mcp`) plus REST downloads under `/api/v1/downloads`.
 - **Deployment:** sidecar to the qBittorrent container, reaching it over loopback. qBittorrent must have "Bypass authentication for clients on localhost" enabled — the MCP server performs no login.
 - **No auth, no web UI.** HTTP transport also exposes a small REST facade under `/api/v1` for n8n-style download workflows.
-- **Distribution:** Go binary, Docker container.
+- **Distribution:** Go binary, `ghcr.io/wyvernzora/qbit-bridge`, and `ghcr.io/wyvernzora/qbit-bridge/n8n-nodes`.
 
 ### Stack
 
@@ -46,6 +46,7 @@ make devserver-run             # start dev container
 --addr=:8080                    # listen address for HTTP (QBITTORRENT_ADDR)
 --qb-url=http://localhost:8080  # qBittorrent WebUI base URL (QBITTORRENT_URL)
 --qb-timeout=15s                # per-request HTTP timeout (QBITTORRENT_TIMEOUT)
+--save-paths='kura=/mnt/kura'   # destination aliases (QBITTORRENT_SAVE_PATHS)
 --log-level=debug               # structured JSON log level (QBITTORRENT_LOG_LEVEL)
 ```
 
@@ -57,4 +58,6 @@ make devserver-run             # start dev container
 
 When the user corrects your approach, append a one-line rule here before ending the session. Write it concretely ("Always use X for Y"), never abstractly ("be careful with Y"). If an existing line already covers the correction, tighten it instead of adding a new one.
 
-- (empty)
+- Keep REST adapters under `internal/rest`; do not put REST routes in `internal/mcp`.
+- Keep download business logic in `internal/downloads`; MCP and REST should stay transport adapters.
+- Use `ghcr.io/wyvernzora/qbit-bridge` for the app image and `ghcr.io/wyvernzora/qbit-bridge/n8n-nodes` for the n8n node image.

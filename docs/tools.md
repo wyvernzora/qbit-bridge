@@ -31,7 +31,7 @@ Things the surface is designed to make unnecessary; doing them anyway wastes tok
 qbit-bridge is designed as a **sidecar in a trusted environment**: one agent, loopback-only access to one qBittorrent instance, operator-controlled deploy. This shapes a few deliberate choices the agent should be aware of:
 
 - **No rate limiting.** The MCP spec recommends per-tool rate limits; qbit-bridge omits them because the deploy assumption is a single trusted caller. If you embed qbit-bridge in a multi-tenant or untrusted-caller deployment, add a fronting proxy with rate limits — the surface here does not enforce them.
-- **No authentication on the MCP endpoint.** Same rationale: loopback or container-internal traffic only.
+- **No authentication on the MCP or REST endpoints.** Same rationale: loopback or container-internal traffic only.
 - **qBittorrent must have "Bypass authentication for clients on localhost" enabled.** qbit-bridge performs no login against qBittorrent; the loopback-auth-bypass is load-bearing.
 
 ## Conventions

@@ -1,6 +1,6 @@
 # qbit-bridge
 
-MCP server wrapping the [qBittorrent](https://www.qbittorrent.org) WebUI v2 API for agent-driven download management.
+qBittorrent automation bridge for MCP, REST, and n8n workflows.
 
 Designed to run as a sidecar to the qBittorrent container, reaching the daemon over loopback. qBittorrent must have **"Bypass authentication for clients on localhost"** enabled in WebUI settings — the MCP server performs no login.
 
@@ -122,4 +122,4 @@ Codes: `invalid_argument`, `upstream_unavailable`, `upstream_forbidden`, `upstre
 
 `upstream_forbidden` signals the loopback-auth-bypass assumption was wrong — re-check qBittorrent's WebUI settings.
 
-The qBittorrent WebUI v2 calls go through [`github.com/autobrr/go-qbittorrent`](https://github.com/autobrr/go-qbittorrent); errors from the SDK are translated to the codes above at the MCP tool boundary in [`internal/mcp/errors.go`](internal/mcp/errors.go).
+The qBittorrent WebUI v2 calls go through [`github.com/autobrr/go-qbittorrent`](https://github.com/autobrr/go-qbittorrent); SDK errors are translated into the structured codes above for both MCP and REST clients.
