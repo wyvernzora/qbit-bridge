@@ -21,6 +21,7 @@ import (
 
 	mcppkg "github.com/wyvernzora/qbittorrent-mcp/internal/mcp"
 	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	serverpkg "github.com/wyvernzora/qbittorrent-mcp/internal/server"
 )
 
 // version is overridable at link time via -ldflags="-X main.version=...".
@@ -101,7 +102,7 @@ func run() error {
 		return mcppkg.RunStdio(ctx, server)
 	case "http":
 		logger.Info("starting qbit-mcp", "transport", "http", "addr", *addr, "version", version, "qb_url", *qbURL)
-		return mcppkg.RunHTTP(ctx, server, *addr, logger)
+		return serverpkg.RunHTTP(ctx, server, client, resolver, *addr, logger)
 	default:
 		return fmt.Errorf("invalid --transport %q (want stdio or http)", *transport)
 	}

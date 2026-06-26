@@ -21,6 +21,17 @@ All tools carry the `qbit_` prefix so generic verbs don't collide with other MCP
 | Subscriptions | `qbit_subscribe` | Create or replace a subscription by name. Atomically creates (or replaces) the feed and the auto-download rule pointing at it. `feed_url` is immutable on existing subscriptions. |
 | Subscriptions | `qbit_unsubscribe` | Removes the rule; removes the synthetic feed too when no other subscription still references the same `feed_url`. |
 
+## REST API
+
+HTTP transport also exposes a small REST facade for n8n-style workflows. See [`docs/rest.md`](docs/rest.md).
+
+| Method | Path | What |
+| --- | --- | --- |
+| `POST` | `/api/v1/downloads` | Add one magnet download. |
+| `GET` | `/api/v1/downloads` | List downloads; filter with repeated `states`, `tags`, and `hashes` query params. |
+| `GET` | `/api/v1/downloads/{hash}` | Get one download. |
+| `DELETE` | `/api/v1/downloads/{hash}` | Remove one download from qBittorrent tracking; files are not deleted. |
+
 ### Destination aliases
 
 Tools that direct download storage (`qbit_add_download`, `qbit_subscribe`) **do not accept arbitrary filesystem paths**. The operator declares aliases at boot via `--save-paths` (or `QBITTORRENT_SAVE_PATHS`):
@@ -43,7 +54,7 @@ go build ./cmd/qbit-mcp
 ./qbit-mcp --transport=http --addr=:8080
 ```
 
-HTTP transport exposes the MCP endpoint at `/mcp` and a k8s liveness probe at `/healthz`.
+HTTP transport exposes the MCP endpoint at `/mcp`, REST downloads under `/api/v1/downloads`, and a k8s liveness probe at `/healthz`.
 
 ## Container
 

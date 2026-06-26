@@ -18,7 +18,7 @@ This file holds project-specific context, learnings, and overrides only. Rules i
 - **Tools:** (none yet — scaffolding only; add tools in `internal/mcp/tools.go`).
 - **Transports:** stdio (default), streamable HTTP (`--transport=http --addr=:8080`, MCP mounted at `/mcp`).
 - **Deployment:** sidecar to the qBittorrent container, reaching it over loopback. qBittorrent must have "Bypass authentication for clients on localhost" enabled — the MCP server performs no login.
-- **No auth, no REST API, no web UI.**
+- **No auth, no web UI.** HTTP transport also exposes a small REST facade under `/api/v1` for n8n-style download workflows.
 - **Distribution:** Go binary, Docker container.
 
 ### Stack
@@ -27,7 +27,7 @@ This file holds project-specific context, learnings, and overrides only. Rules i
 - **Entry point:** `cmd/qbit-mcp/main.go` — flag-driven, env fallbacks for all flags (prefix `QBITTORRENT_`).
 - **MCP SDK:** `github.com/modelcontextprotocol/go-sdk`; streamable HTTP handler at `/mcp`, health check at `/healthz`.
 - **qBittorrent client:** [`github.com/autobrr/go-qbittorrent`](https://github.com/autobrr/go-qbittorrent), constructed directly in `cmd/qbit-mcp/main.go`. Username and Password are intentionally empty so `LoginCtx` no-ops; the sidecar relies on qBittorrent's loopback-auth-bypass.
-- **Server wiring:** `internal/mcp/server.go` (transport setup + HTTP handler), `internal/mcp/tools.go` (tool definitions), `internal/mcp/errors.go` (ToolError + ErrCode shared by all tools).
+- **Server wiring:** `internal/server/server.go` (HTTP mux for MCP/REST/health), `internal/downloads` (download business logic, filtering, projections, qBittorrent mutations), `internal/rest` (n8n-facing REST facade), `internal/mcp/server.go` (MCP construction + stdio transport), `internal/mcp/tools.go` (tool definitions), `internal/mcp/errors.go` (MCP ToolError + ErrCode).
 
 ### Commands
 
