@@ -1,0 +1,17 @@
+.git
+.gitignore
+.dockerignore
+bin
+dist
+build
+coverage.out
+*.coverprofile
+.env
+.env.*
+.DS_Store
+.idea
+.vscode
+.claude
+scratch
+integrations/n8n/node_modules
+integrations/n8n/dist

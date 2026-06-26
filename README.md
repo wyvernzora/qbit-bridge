@@ -32,6 +32,18 @@ HTTP transport also exposes a small REST facade for n8n-style workflows. See [`d
 | `GET` | `/api/v1/downloads/{hash}` | Get one download. |
 | `DELETE` | `/api/v1/downloads/{hash}` | Remove one download from qBittorrent tracking; files are not deleted. |
 
+## n8n nodes
+
+The `integrations/n8n` package exports a community node for the REST facade. It
+ships the **qBittorrent** node with Download **Add**, **List**, **Get**, and
+**Remove** operations, plus a `qBittorrent MCP API` credential.
+
+```sh
+cd integrations/n8n
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+```
+
 ### Destination aliases
 
 Tools that direct download storage (`qbit_add_download`, `qbit_subscribe`) **do not accept arbitrary filesystem paths**. The operator declares aliases at boot via `--save-paths` (or `QBITTORRENT_SAVE_PATHS`):

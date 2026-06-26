@@ -1,0 +1,37 @@
+{
+  "name": "n8n-nodes-qbittorrent-mcp",
+  "version": "0.0.0",
+  "description": "n8n nodes for qbittorrent-mcp download workflows.",
+  "keywords": ["n8n-community-node-package", "qbittorrent", "mcp"],
+  "license": "MIT",
+  "packageManager": "pnpm@10.6.5",
+  "engines": {
+    "node": ">=20.15"
+  },
+  "main": "index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/QBittorrentMcpApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/QBittorrent/QBittorrent.node.js"
+    ]
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "n8n-workflow": "*",
+    "typescript": "^5.7.2"
+  }
+}
