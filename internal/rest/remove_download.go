@@ -3,7 +3,7 @@ package rest
 import (
 	"net/http"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/downloads"
+	"github.com/wyvernzora/qbit-bridge/internal/downloads"
 )
 
 func (api api) removeDownload(w http.ResponseWriter, r *http.Request, hash string) {

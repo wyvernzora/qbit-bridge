@@ -7,7 +7,7 @@ import (
 	qbt "github.com/autobrr/go-qbittorrent"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 // registerTags wires the 1 tag tool onto s. Tags auto-create when referenced

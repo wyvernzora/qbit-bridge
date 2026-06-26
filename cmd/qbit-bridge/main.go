@@ -1,4 +1,4 @@
-// Command qbit-mcp is the qBittorrent MCP server entrypoint.
+// Command qbit-bridge is the qBit Bridge server entrypoint.
 //
 // It exposes MCP tools wrapping the qBittorrent WebUI v2 API over either the
 // stdio transport (for local agents) or the streamable HTTP transport (for
@@ -19,9 +19,9 @@ import (
 
 	qbt "github.com/autobrr/go-qbittorrent"
 
-	mcppkg "github.com/wyvernzora/qbittorrent-mcp/internal/mcp"
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
-	serverpkg "github.com/wyvernzora/qbittorrent-mcp/internal/server"
+	mcppkg "github.com/wyvernzora/qbit-bridge/internal/mcp"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
+	serverpkg "github.com/wyvernzora/qbit-bridge/internal/server"
 )
 
 // version is overridable at link time via -ldflags="-X main.version=...".
@@ -34,7 +34,7 @@ const (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "qbit-mcp:", err)
+		fmt.Fprintln(os.Stderr, "qbit-bridge:", err)
 		os.Exit(1)
 	}
 }
@@ -98,10 +98,10 @@ func run() error {
 
 	switch *transport {
 	case "stdio":
-		logger.Info("starting qbit-mcp", "transport", "stdio", "version", version, "qb_url", *qbURL)
+		logger.Info("starting qbit-bridge", "transport", "stdio", "version", version, "qb_url", *qbURL)
 		return mcppkg.RunStdio(ctx, server)
 	case "http":
-		logger.Info("starting qbit-mcp", "transport", "http", "addr", *addr, "version", version, "qb_url", *qbURL)
+		logger.Info("starting qbit-bridge", "transport", "http", "addr", *addr, "version", version, "qb_url", *qbURL)
 		return serverpkg.RunHTTP(ctx, server, client, resolver, *addr, logger)
 	default:
 		return fmt.Errorf("invalid --transport %q (want stdio or http)", *transport)

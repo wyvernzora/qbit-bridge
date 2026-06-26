@@ -10,9 +10,9 @@ Anthropic's [Writing tools for agents](https://www.anthropic.com/engineering/wri
 
 Three components.
 
-1. **A test qBittorrent instance** with known initial state. Probably a docker-compose: `qbittorrent:latest` + `qbit-mcp` + the eval runner.
+1. **A test qBittorrent instance** with known initial state. Probably a docker-compose: `qbittorrent:latest` + `qbit-bridge` + the eval runner.
 2. **An eval runner** that:
-   - Spins up qbit-mcp pointed at the test qBittorrent.
+   - Spins up qbit-bridge pointed at the test qBittorrent.
    - For each task in `tasks/`: starts a fresh Claude session, sends the task prompt, captures the full transcript (tool calls + token counts + final response).
    - Asserts the trace against expected tool-call sequence and final-state expectations.
 3. **A scoring report** that emits, per task: pass/fail, total tokens, tool-call count, wall-clock duration, error rate.
@@ -92,6 +92,6 @@ Initial targets — adjust once a baseline exists:
 
 ## Out of scope (for v1 of this eval)
 
-- Multi-server interaction (qbit-mcp + dmhy-mcp in the same session). Save for a cross-server eval suite once both surfaces stabilize.
+- Multi-server interaction (qbit-bridge + dmhy-mcp in the same session). Save for a cross-server eval suite once both surfaces stabilize.
 - Long-running tasks (subscribe → wait for match → confirm download added). Needs a clock-fast-forward shim on qBittorrent that doesn't exist.
 - Adversarial prompts (prompt injection through feed titles). Important but a different workstream — security review, not surface design.

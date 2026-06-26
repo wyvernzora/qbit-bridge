@@ -1,6 +1,6 @@
-# air config for the qbit-mcp dev container. Watches /src/cmd/ and
+# air config for the qbit-bridge dev container. Watches /src/cmd/ and
 # /src/internal/ for .go changes; rebuilds the binary, restarts via
-# run-qbit-mcp.sh which launches with --transport=http.
+# run-qbit-bridge.sh which launches with --transport=http.
 #
 # Polling is on because macOS bind mounts don't deliver inotify events
 # reliably to Linux containers; CPU cost is negligible at this interval.
@@ -10,8 +10,8 @@ tmp_dir = "/src/tmp"
 testdata_dir = "testdata"
 
 [build]
-  cmd = "go build -o /src/tmp/qbit-mcp ./cmd/qbit-mcp"
-  bin = "/usr/local/bin/run-qbit-mcp.sh"
+  cmd = "go build -o /src/tmp/qbit-bridge ./cmd/qbit-bridge"
+  bin = "/usr/local/bin/run-qbit-bridge.sh"
   delay = 200
   poll = true
   poll_interval = 500

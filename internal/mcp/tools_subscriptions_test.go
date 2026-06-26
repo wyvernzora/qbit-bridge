@@ -99,6 +99,13 @@ func TestFeedPathForURL_DifferentURLsDifferentPaths(t *testing.T) {
 	}
 }
 
+func TestRuleIsManaged_LegacyPrefix(t *testing.T) {
+	rule := qbt.RSSAutoDownloadRule{AffectedFeeds: []string{legacyFeedPathPrefix + "abc123"}}
+	if !ruleIsManaged(rule) {
+		t.Fatal("legacy qbit-mcp feed path should remain managed")
+	}
+}
+
 // --- qbit_search_subscriptions ---
 
 func TestSearchSubscriptions_ManagedRuleProjected(t *testing.T) {
@@ -123,7 +130,7 @@ func TestSearchSubscriptions_ManagedRuleProjected(t *testing.T) {
 	}
 	// SavePath is the prefixed form ("kura-inbox" for an exact root
 	// match; "kura-inbox:relpath" when the rule's save_path nests
-	// below the alias root — qbit-mcp never produces the nested form
+	// below the alias root — qbit-bridge never produces the nested form
 	// itself, but operator-edits via the WebUI can). Agents that
 	// need just the alias name split on ":" and take the prefix.
 	if s.SavePath != "kura-inbox" {

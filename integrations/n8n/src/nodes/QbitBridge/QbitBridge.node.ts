@@ -7,12 +7,12 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 
-const CRED = 'qbittorrentMcpApi';
+const CRED = 'qbitBridgeApi';
 
-export class QBittorrent implements INodeType {
+export class QbitBridge implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'qBittorrent',
-		name: 'qbittorrent',
+		displayName: 'qBit Bridge',
+		name: 'qbitBridge',
 		icon: {
 			light: 'file:qbittorrent-light.svg',
 			dark: 'file:qbittorrent-dark.svg',
@@ -20,8 +20,8 @@ export class QBittorrent implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + " (" + $parameter["resource"] + ")"}}',
-		description: 'Drive qbittorrent-mcp download workflows',
-		defaults: { name: 'qBittorrent' },
+		description: 'Drive qbit-bridge download workflows',
+		defaults: { name: 'qBit Bridge' },
 		inputs: ['main'],
 		outputs: ['main'],
 		credentials: [{ name: CRED, required: true }],

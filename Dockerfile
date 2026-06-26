@@ -15,16 +15,16 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build \
     -trimpath \
     -ldflags="-s -w -X main.version=${VERSION}" \
-    -o /out/qbit-mcp \
-    ./cmd/qbit-mcp
+    -o /out/qbit-bridge \
+    ./cmd/qbit-bridge
 
 ## Runtime stage
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY --from=build /out/qbit-mcp /usr/local/bin/qbit-mcp
+COPY --from=build /out/qbit-bridge /usr/local/bin/qbit-bridge
 
 EXPOSE 8080
 USER nonroot:nonroot
 
-ENTRYPOINT ["/usr/local/bin/qbit-mcp"]
+ENTRYPOINT ["/usr/local/bin/qbit-bridge"]
 CMD ["--transport=http", "--addr=:8080"]

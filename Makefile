@@ -19,7 +19,7 @@ GOLANGCI_LINT ?= $(shell if command -v golangci-lint >/dev/null 2>&1; then \
 		fi; \
 	fi)
 
-DEVSERVER_IMAGE      ?= qbit-mcp-devserver
+DEVSERVER_IMAGE      ?= qbit-bridge-devserver
 # Ports offset from dmhy-mcp devserver (8090 + 6374/6377) and kura devserver
 # (8080/8081 + 6274/6277) so all three can run concurrently. Override on the
 # make command line if these collide too.
@@ -47,7 +47,7 @@ QBITTORRENT_URL ?= http://host.docker.internal:$(KUBECTL_QBIT_LOCAL_PORT)
 .PHONY: build check fmt lint test vet devserver-build devserver-run port-forward
 
 build:
-	go build -trimpath -ldflags='$(GO_LDFLAGS)' -o bin/qbit-mcp ./cmd/qbit-mcp
+	go build -trimpath -ldflags='$(GO_LDFLAGS)' -o bin/qbit-bridge ./cmd/qbit-bridge
 
 fmt:
 	gofmt -w $(GOFMT_DIRS)

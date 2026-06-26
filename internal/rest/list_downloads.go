@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/downloads"
+	"github.com/wyvernzora/qbit-bridge/internal/downloads"
 )
 
 func (api api) listDownloads(w http.ResponseWriter, r *http.Request) {

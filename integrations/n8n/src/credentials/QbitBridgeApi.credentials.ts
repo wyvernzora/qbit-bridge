@@ -5,10 +5,10 @@ import type {
 	INodeProperties,
 } from 'n8n-workflow';
 
-export class QBittorrentMcpApi implements ICredentialType {
-	name = 'qbittorrentMcpApi';
-	displayName = 'qBittorrent MCP API';
-	documentationUrl = 'https://github.com/wyvernzora/qbittorrent-mcp';
+export class QbitBridgeApi implements ICredentialType {
+	name = 'qbitBridgeApi';
+	displayName = 'qBit Bridge API';
+	documentationUrl = 'https://github.com/wyvernzora/qbit-bridge';
 	icon: Icon = {
 		light: 'file:qbittorrent-light.svg',
 		dark: 'file:qbittorrent-dark.svg',
@@ -19,10 +19,10 @@ export class QBittorrentMcpApi implements ICredentialType {
 			displayName: 'Base URL',
 			name: 'baseUrl',
 			type: 'string',
-			default: 'http://qbit-mcp:8080',
-			placeholder: 'http://qbit-mcp:8080',
+			default: 'http://qbit-bridge:8080',
+			placeholder: 'http://qbit-bridge:8080',
 			required: true,
-			description: 'Base URL of qbittorrent-mcp running with HTTP transport enabled',
+			description: 'Base URL of qbit-bridge running with HTTP transport enabled',
 		},
 	];
 

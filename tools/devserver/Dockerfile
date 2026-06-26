@@ -1,4 +1,4 @@
-# Dev container: hot-reload qbit-mcp (HTTP transport) + bundled
+# Dev container: hot-reload qbit-bridge (HTTP transport) + bundled
 # @modelcontextprotocol/inspector UI.
 #
 # Build: make devserver-build
@@ -24,12 +24,12 @@ RUN go mod download
 
 # /src is bind-mounted at runtime, overlaying anything we COPY there.
 # Stash air config + scripts outside /src so they survive the mount.
-COPY tools/devserver/.air.toml      /etc/qbit-mcp/air.toml
-COPY tools/devserver/run-qbit-mcp.sh /usr/local/bin/run-qbit-mcp.sh
+COPY tools/devserver/.air.toml      /etc/qbit-bridge/air.toml
+COPY tools/devserver/run-qbit-bridge.sh /usr/local/bin/run-qbit-bridge.sh
 COPY tools/devserver/entrypoint.sh  /entrypoint.sh
-RUN chmod +x /usr/local/bin/run-qbit-mcp.sh /entrypoint.sh
+RUN chmod +x /usr/local/bin/run-qbit-bridge.sh /entrypoint.sh
 
-# qbit-mcp HTTP transport listens on 0.0.0.0 inside the container;
+# qbit-bridge HTTP transport listens on 0.0.0.0 inside the container;
 # the Makefile target pins host-side ports to 127.0.0.1.
 # Ports offset from dmhy-mcp devserver (8090 + 6374/6377) and kura devserver
 # (8080/8081 + 6274/6277) so all three can run concurrently.

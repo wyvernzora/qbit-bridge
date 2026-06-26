@@ -7,7 +7,7 @@ import (
 	qbt "github.com/autobrr/go-qbittorrent"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 // registerDestinations wires the 1 destination tool onto s.
@@ -20,7 +20,7 @@ func registerDestinations(s *mcpsdk.Server, _ *qbt.Client, resolver *savepath.Re
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
 			Name:        "qbit_list_destinations",
-			Description: "List the deploy-time-configured save destinations. Each entry is an alias name (used as the `destination` value on qbit_add_download and qbit_subscribe) paired with the absolute filesystem path it resolves to. Agents that observed a raw save_path on a Download output can reverse-look it up here to find the matching alias name. The list is fixed for the lifetime of the qbit-mcp process; restart with a different --save-paths to change it.",
+			Description: "List the deploy-time-configured save destinations. Each entry is an alias name (used as the `destination` value on qbit_add_download and qbit_subscribe) paired with the absolute filesystem path it resolves to. Agents that observed a raw save_path on a Download output can reverse-look it up here to find the matching alias name. The list is fixed for the lifetime of the qbit-bridge process; restart with a different --save-paths to change it.",
 			Annotations: readOnlyAnnotations(),
 		},
 		wrap("qbit_list_destinations", logger, listDestinationsHandler(resolver)),

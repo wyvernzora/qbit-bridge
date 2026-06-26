@@ -13,7 +13,7 @@ import (
 
 	qbt "github.com/autobrr/go-qbittorrent"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 // fixture6Downloads is the upstream /api/v2/torrents/info payload used by

@@ -8,7 +8,7 @@ import (
 
 	qbt "github.com/autobrr/go-qbittorrent"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 type capturedReq struct {

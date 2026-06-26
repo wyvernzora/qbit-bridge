@@ -1,4 +1,4 @@
-module github.com/wyvernzora/qbittorrent-mcp
+module github.com/wyvernzora/qbit-bridge
 
 go 1.25.0
 

@@ -6,7 +6,7 @@ import (
 	qbt "github.com/autobrr/go-qbittorrent"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 // registerSubscriptions wires the 3 subscription tools onto s. A
@@ -32,7 +32,7 @@ func registerSubscriptions(s *mcpsdk.Server, client *qbt.Client, resolver *savep
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
 			Name:        "qbit_subscribe",
-			Description: "Create or replace a subscription by name. Atomically creates (or replaces) the qBittorrent feed and the auto-download rule pointing at it. The feed_url is the only feed-side input; qbit-mcp derives a synthetic feed path 'qbit-mcp-<hash>' so duplicate feed_urls across subscriptions share storage transparently. Changing feed_url on an existing subscription is rejected — unsubscribe and resubscribe instead. tags is required on every call; passing a different tags array on replace re-tags FUTURE auto-added downloads only (existing matches keep their original tags — retroactive retag is out of scope). " + destHint,
+			Description: "Create or replace a subscription by name. Atomically creates (or replaces) the qBittorrent feed and the auto-download rule pointing at it. The feed_url is the only feed-side input; qbit-bridge derives a synthetic feed path 'qbit-bridge-<hash>' so duplicate feed_urls across subscriptions share storage transparently. Changing feed_url on an existing subscription is rejected — unsubscribe and resubscribe instead. tags is required on every call; passing a different tags array on replace re-tags FUTURE auto-added downloads only (existing matches keep their original tags — retroactive retag is out of scope). " + destHint,
 			Annotations: mutatingAnnotations(false),
 		},
 		wrap("qbit_subscribe", logger, subscribeHandler(client, resolver, logger)),

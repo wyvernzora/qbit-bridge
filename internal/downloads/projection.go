@@ -7,7 +7,7 @@ import (
 
 	qbt "github.com/autobrr/go-qbittorrent"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 const qbtETAUnknown = 8640000 // qBittorrent's "100 days" sentinel for unknown ETA

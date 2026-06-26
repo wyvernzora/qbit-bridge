@@ -12,9 +12,9 @@ import (
 	qbt "github.com/autobrr/go-qbittorrent"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/downloads"
-	"github.com/wyvernzora/qbittorrent-mcp/internal/rest"
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/downloads"
+	"github.com/wyvernzora/qbit-bridge/internal/rest"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 const (

@@ -9,11 +9,11 @@ import (
 	qbt "github.com/autobrr/go-qbittorrent"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 const (
-	serverName = "qbit-mcp"
+	serverName = "qbit-bridge"
 )
 
 // New constructs the MCP server with all qBittorrent tools registered.

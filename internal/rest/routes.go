@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/downloads"
+	"github.com/wyvernzora/qbit-bridge/internal/downloads"
 )
 
 const (

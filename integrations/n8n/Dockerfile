@@ -1,4 +1,4 @@
-# qbittorrent-mcp n8n nodes init-container image.
+# qbit-bridge n8n nodes init-container image.
 #
 # Stage 1 compiles the TypeScript package. Stage 2 copies only package.json
 # and dist/ into a tiny image whose entrypoint installs the package into the
@@ -16,9 +16,9 @@ RUN corepack pnpm build
 RUN mkdir -p /pkg && cp -r package.json dist /pkg/
 
 FROM busybox:1.37-musl
-LABEL org.opencontainers.image.source="https://github.com/wyvernzora/qbittorrent-mcp"
-COPY --from=build /pkg /qbittorrent-mcp-nodes
+LABEL org.opencontainers.image.source="https://github.com/wyvernzora/qbit-bridge"
+COPY --from=build /pkg /qbit-bridge-nodes
 COPY integrations/n8n/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-ENV QBITTORRENT_MCP_NODES_TARGET=/opt/n8n/custom
+ENV QBIT_BRIDGE_NODES_TARGET=/opt/n8n/custom
 ENTRYPOINT ["/entrypoint.sh"]

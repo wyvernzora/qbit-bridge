@@ -1,4 +1,4 @@
-# qbittorrent-mcp
+# qbit-bridge
 
 MCP server wrapping the [qBittorrent](https://www.qbittorrent.org) WebUI v2 API for agent-driven download management.
 
@@ -36,7 +36,7 @@ HTTP transport also exposes a small REST facade for n8n-style workflows. See [`d
 
 The `integrations/n8n` package exports a community node for the REST facade. It
 ships the **qBittorrent** node with Download **Add**, **List**, **Get**, and
-**Remove** operations, plus a `qBittorrent MCP API` credential.
+**Remove** operations, plus a `qBit Bridge API` credential.
 
 ```sh
 cd integrations/n8n
@@ -61,9 +61,9 @@ Every mutation (`add`, `remove`, `subscribe`, `unsubscribe`) emits a structured 
 ## Build & run
 
 ```sh
-go build ./cmd/qbit-mcp
-./qbit-mcp --transport=stdio
-./qbit-mcp --transport=http --addr=:8080
+go build ./cmd/qbit-bridge
+./qbit-bridge --transport=stdio
+./qbit-bridge --transport=http --addr=:8080
 ```
 
 HTTP transport exposes the MCP endpoint at `/mcp`, REST downloads under `/api/v1/downloads`, and a k8s liveness probe at `/healthz`.
@@ -73,19 +73,19 @@ HTTP transport exposes the MCP endpoint at `/mcp`, REST downloads under `/api/v1
 Prebuilt images are published to GHCR on every push to `main` (as `:dev`) and on tag pushes (as `:vX.Y.Z` and `:latest`).
 
 ```sh
-docker pull ghcr.io/wyvernzora/qbittorrent-mcp:latest
+docker pull ghcr.io/wyvernzora/qbit-bridge:latest
 docker run --rm --network host \
   -e QBITTORRENT_URL=http://localhost:8080 \
   -e QBITTORRENT_SAVE_PATHS='kura-inbox=/mnt/kura' \
-  ghcr.io/wyvernzora/qbittorrent-mcp:latest
+  ghcr.io/wyvernzora/qbit-bridge:latest
 ```
 
 Local build:
 
 ```sh
-docker build -t qbit-mcp .
-docker run --rm --network host qbit-mcp           # sidecar-style: shares loopback with qBittorrent
-docker run --rm -i qbit-mcp --transport=stdio     # stdio
+docker build -t qbit-bridge .
+docker run --rm --network host qbit-bridge           # sidecar-style: shares loopback with qBittorrent
+docker run --rm -i qbit-bridge --transport=stdio     # stdio
 ```
 
 ## Devserver (hot reload + MCP inspector)

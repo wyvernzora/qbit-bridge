@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/wyvernzora/qbittorrent-mcp/internal/savepath"
+	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
 func callListDestinations(t *testing.T, resolver *savepath.Resolver) (ListDestinationsOutput, *ToolError) {

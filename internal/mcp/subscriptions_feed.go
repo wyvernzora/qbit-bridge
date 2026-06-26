@@ -11,10 +11,14 @@ import (
 
 const (
 	// feedPathPrefix is the qBittorrent RSS feed-name prefix for every
-	// feed created by qbit-mcp. Flat (no folder) — keeps the synthetic
+	// feed created by qbit-bridge. Flat (no folder) — keeps the synthetic
 	// path single-token, so the RSS folder-separator question (qbit uses
 	// backslash) never enters play.
-	feedPathPrefix = "qbit-mcp-"
+	feedPathPrefix = "qbit-bridge-"
+
+	// legacyFeedPathPrefix keeps subscriptions created before the project
+	// rename visible and removable. New feeds use feedPathPrefix.
+	legacyFeedPathPrefix = "qbit-mcp-"
 )
 
 // feedPathForURL derives the synthetic qBittorrent RSS feed path for a
@@ -33,15 +37,18 @@ func feedPathForURL(url string) string {
 }
 
 // ruleIsManaged tests whether a qBittorrent rule belongs to the
-// subscription surface qbit-mcp exposes. We only surface rules with
+// subscription surface qbit-bridge exposes. We only surface rules with
 // exactly one affected feed whose path is under the synthetic
-// "qbit-mcp-" prefix; rules created via qBittorrent's WebUI directly,
-// or rules targeting multiple feeds, are deliberately invisible.
+// "qbit-bridge-" prefix, plus the legacy "qbit-mcp-" prefix created before
+// the project rename; rules created via qBittorrent's WebUI directly, or rules
+// targeting multiple feeds, are deliberately invisible.
 func ruleIsManaged(rule qbt.RSSAutoDownloadRule) bool {
 	if len(rule.AffectedFeeds) != 1 {
 		return false
 	}
-	return strings.HasPrefix(rule.AffectedFeeds[0], feedPathPrefix)
+	feedPath := rule.AffectedFeeds[0]
+	return strings.HasPrefix(feedPath, feedPathPrefix) ||
+		strings.HasPrefix(feedPath, legacyFeedPathPrefix)
 }
 
 // findFeedAtPath walks the hierarchical RSSItems map looking for a feed
@@ -74,7 +81,7 @@ func findFeedAtPath(items qbt.RSSItems, path string) (qbt.RSSFeed, bool) {
 }
 
 // splitFeedPath handles both qBittorrent's native backslash separator
-// and the forward-slash form some operator-side tools use. qbit-mcp's
+// and the forward-slash form some operator-side tools use. qbit-bridge's
 // own feed paths are flat single-token strings so this is mostly a
 // safety net.
 func splitFeedPath(path string) []string {

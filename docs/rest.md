@@ -3,7 +3,7 @@
 HTTP transport exposes a small REST facade for n8n-style workflows beside MCP:
 
 ```sh
-./qbit-mcp --transport=http --addr=:8080
+./qbit-bridge --transport=http --addr=:8080
 ```
 
 Base path: `/api/v1`. The REST surface is unauthenticated for the same sidecar/trusted-network reason as MCP.

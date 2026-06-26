@@ -1,7 +1,7 @@
 {
-  "name": "n8n-nodes-qbittorrent-mcp",
+  "name": "n8n-nodes-qbit-bridge",
   "version": "0.0.0",
-  "description": "n8n nodes for qbittorrent-mcp download workflows.",
+  "description": "n8n nodes for qbit-bridge download workflows.",
   "keywords": ["n8n-community-node-package", "qbittorrent", "mcp"],
   "license": "MIT",
   "packageManager": "pnpm@10.6.5",
@@ -20,10 +20,10 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/QBittorrentMcpApi.credentials.js"
+      "dist/credentials/QbitBridgeApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/QBittorrent/QBittorrent.node.js"
+      "dist/nodes/QbitBridge/QbitBridge.node.js"
     ]
   },
   "peerDependencies": {

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Drop-in operating instructions for coding agents working on **qbittorrent-mcp**. Read the user-global rules first:
+Drop-in operating instructions for coding agents working on **qbit-bridge**. Read the user-global rules first:
 
 - `~/.agents/AGENTS.md` — universal agent-behavior rules (non-negotiables, simplicity, surgical changes, communication style, grilling, etc.)
 - `~/.agents/go.md` — Go engineering rules (loaded because this repo has `go.mod`)
@@ -11,9 +11,9 @@ This file holds project-specific context, learnings, and overrides only. Rules i
 
 ## 1. Project context
 
-### About qbittorrent-mcp
+### About qbit-bridge
 
-- **Name:** qbittorrent-mcp.
+- **Name:** qbit-bridge.
 - **Domain:** MCP server wrapping the qBittorrent WebUI v2 API.
 - **Tools:** (none yet — scaffolding only; add tools in `internal/mcp/tools.go`).
 - **Transports:** stdio (default), streamable HTTP (`--transport=http --addr=:8080`, MCP mounted at `/mcp`).
@@ -24,17 +24,17 @@ This file holds project-specific context, learnings, and overrides only. Rules i
 ### Stack
 
 - **Language:** Go 1.25.0+. Pinned in `go.mod`.
-- **Entry point:** `cmd/qbit-mcp/main.go` — flag-driven, env fallbacks for all flags (prefix `QBITTORRENT_`).
+- **Entry point:** `cmd/qbit-bridge/main.go` — flag-driven, env fallbacks for all flags (prefix `QBITTORRENT_`).
 - **MCP SDK:** `github.com/modelcontextprotocol/go-sdk`; streamable HTTP handler at `/mcp`, health check at `/healthz`.
-- **qBittorrent client:** [`github.com/autobrr/go-qbittorrent`](https://github.com/autobrr/go-qbittorrent), constructed directly in `cmd/qbit-mcp/main.go`. Username and Password are intentionally empty so `LoginCtx` no-ops; the sidecar relies on qBittorrent's loopback-auth-bypass.
+- **qBittorrent client:** [`github.com/autobrr/go-qbittorrent`](https://github.com/autobrr/go-qbittorrent), constructed directly in `cmd/qbit-bridge/main.go`. Username and Password are intentionally empty so `LoginCtx` no-ops; the sidecar relies on qBittorrent's loopback-auth-bypass.
 - **Server wiring:** `internal/server/server.go` (HTTP mux for MCP/REST/health), `internal/downloads` (download business logic, filtering, projections, qBittorrent mutations), `internal/rest` (n8n-facing REST facade), `internal/mcp/server.go` (MCP construction + stdio transport), `internal/mcp/tools.go` (tool definitions), `internal/mcp/errors.go` (MCP ToolError + ErrCode).
 
 ### Commands
 
 ```sh
-go run ./cmd/qbit-mcp          # run from source (stdio)
+go run ./cmd/qbit-bridge          # run from source (stdio)
 go test ./...                  # full test suite
-go build -o bin/qbit-mcp ./cmd/qbit-mcp
+go build -o bin/qbit-bridge ./cmd/qbit-bridge
 make devserver-build           # build dev image (hot-reload + inspector)
 make devserver-run             # start dev container
 ```

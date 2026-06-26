@@ -1,6 +1,6 @@
-# qbittorrent-mcp n8n nodes
+# qbit-bridge n8n nodes
 
-Custom n8n node for qbittorrent-mcp. The package is built as an init-container
+Custom n8n node for qbit-bridge. The package is built as an init-container
 image that installs into the directory n8n reads from `N8N_CUSTOM_EXTENSIONS`.
 
 ## Node

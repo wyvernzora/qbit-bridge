@@ -1,6 +1,6 @@
 # Tool surface
 
-Design spec for the MCP tools `qbit-mcp` exposes. Eight tools across four groups: downloads (3), tags (1), destinations (1), subscriptions (3).
+Design spec for the MCP tools `qbit-bridge` exposes. Eight tools across four groups: downloads (3), tags (1), destinations (1), subscriptions (3).
 
 Design priorities:
 
@@ -28,11 +28,11 @@ Things the surface is designed to make unnecessary; doing them anyway wastes tok
 
 ## Operating model
 
-qbit-mcp is designed as a **sidecar in a trusted environment**: one agent, loopback-only access to one qBittorrent instance, operator-controlled deploy. This shapes a few deliberate choices the agent should be aware of:
+qbit-bridge is designed as a **sidecar in a trusted environment**: one agent, loopback-only access to one qBittorrent instance, operator-controlled deploy. This shapes a few deliberate choices the agent should be aware of:
 
-- **No rate limiting.** The MCP spec recommends per-tool rate limits; qbit-mcp omits them because the deploy assumption is a single trusted caller. If you embed qbit-mcp in a multi-tenant or untrusted-caller deployment, add a fronting proxy with rate limits — the surface here does not enforce them.
+- **No rate limiting.** The MCP spec recommends per-tool rate limits; qbit-bridge omits them because the deploy assumption is a single trusted caller. If you embed qbit-bridge in a multi-tenant or untrusted-caller deployment, add a fronting proxy with rate limits — the surface here does not enforce them.
 - **No authentication on the MCP endpoint.** Same rationale: loopback or container-internal traffic only.
-- **qBittorrent must have "Bypass authentication for clients on localhost" enabled.** qbit-mcp performs no login against qBittorrent; the loopback-auth-bypass is load-bearing.
+- **qBittorrent must have "Bypass authentication for clients on localhost" enabled.** qbit-bridge performs no login against qBittorrent; the loopback-auth-bypass is load-bearing.
 
 ## Conventions
 
@@ -140,9 +140,9 @@ Malformed patterns return `invalid_argument` naming the offending entry.
 1. `dmhy_search_releases(keyword="<series>")` → reads `output.feed_url` + scans `output.results` to confirm the right series.
 2. `qbit_subscribe(name="<...>", feed_url=output.feed_url, destination="<alias>", tags=["tvdb:<id>"])` → atomic feed + rule creation.
 
-The agent never edits the URL — that's the point. qbit-mcp's URL-hash dedupe guarantees two subscriptions sharing the same `feed_url` share the underlying qBittorrent feed transparently, even if the agent re-asks `dmhy_search_releases` later with the same keyword and pipes the URL through again.
+The agent never edits the URL — that's the point. qbit-bridge's URL-hash dedupe guarantees two subscriptions sharing the same `feed_url` share the underlying qBittorrent feed transparently, even if the agent re-asks `dmhy_search_releases` later with the same keyword and pipes the URL through again.
 
-For one-shot grabs (one specific episode) the agent goes through `dmhy_get_magnets(info_hashes=[...])` → `qbit_add_download(magnet=...)` instead, and qbit-mcp's idempotent re-add covers retry safety on that path too.
+For one-shot grabs (one specific episode) the agent goes through `dmhy_get_magnets(info_hashes=[...])` → `qbit_add_download(magnet=...)` instead, and qbit-bridge's idempotent re-add covers retry safety on that path too.
 
 ### Hash format
 
@@ -168,7 +168,7 @@ Codes used by this tool surface:
 | `upstream_unavailable` | Network error, 5xx from qBittorrent, or context cancellation |
 | `upstream_forbidden` | 401/403 from qBittorrent — loopback-auth-bypass is misconfigured |
 | `upstream_not_found` | Hash, rule, or path that the request references does not exist |
-| `internal` | Bug in qbit-mcp (e.g. response decode failure) |
+| `internal` | Bug in qbit-bridge (e.g. response decode failure) |
 
 ### Normalized download state
 
@@ -345,7 +345,7 @@ Tags auto-create when `qbit_add_download.tags` references an unknown tag. No `cr
 
 ### `qbit_list_destinations`
 
-Read the deploy-time-configured save-path aliases. No upstream call — the map is fixed for the lifetime of the qbit-mcp process. Restart with a different `--save-paths` / `QBITTORRENT_SAVE_PATHS` to change it.
+Read the deploy-time-configured save-path aliases. No upstream call — the map is fixed for the lifetime of the qbit-bridge process. Restart with a different `--save-paths` / `QBITTORRENT_SAVE_PATHS` to change it.
 
 **Output:**
 
@@ -369,21 +369,25 @@ Returns an empty array when no aliases are configured. Names are sorted alphabet
 
 ## Subscription tools
 
-A subscription bundles an RSS feed and the auto-download rule that filters its items into actual downloads. qBittorrent's native model has two separate layers (feeds, rules); qbit-mcp fuses them so agents work with one concept: "watch this URL, add matches to this destination with these tags."
+A subscription bundles an RSS feed and the auto-download rule that filters its items into actual downloads. qBittorrent's native model has two separate layers (feeds, rules); qbit-bridge fuses them so agents work with one concept: "watch this URL, add matches to this destination with these tags."
 
 Handlers call qBittorrent's `/api/v2/rss/*` endpoints through `github.com/autobrr/go-qbittorrent` v1.15.0, which surfaces the full RSS API (feeds, rules, items, matching articles).
 
 ### Feed identity
 
-`feed_url` is the only feed-side input on `qbit_subscribe`. qbit-mcp derives the synthetic qBittorrent feed path as:
+`feed_url` is the only feed-side input on `qbit_subscribe`. qbit-bridge derives the synthetic qBittorrent feed path as:
 
 ```
-qbit-mcp-<first-16-hex-chars-of-sha256(feed_url)>
+qbit-bridge-<first-16-hex-chars-of-sha256(feed_url)>
 ```
 
 Subscriptions that share the same `feed_url` therefore collide on the same feed path — qBittorrent stores the feed once and both rules reference it. Delete-subscription only removes the underlying feed when no other subscription still references it. The path is a single-token flat name (no folder), which sidesteps qBittorrent's RSS folder-separator quirk (backslash). Agents never see or manage qbit's RSS folder tree directly.
 
-`feed_url` is the literal dedupe key — `https://x.com/feed` and `https://x.com/feed/` hash differently. qbit-mcp does **not** normalize URLs (trailing slashes, query-param order, case in the path) because query-bearing feeds (dmhy and similar) are sensitive to exact form. Callers are responsible for using a consistent URL across subscriptions they intend to dedupe.
+Subscriptions created before the rename used `qbit-mcp-<hash>` feed paths.
+qbit-bridge still treats those as managed so existing rules remain visible and
+removable; new subscriptions use `qbit-bridge-<hash>`.
+
+`feed_url` is the literal dedupe key — `https://x.com/feed` and `https://x.com/feed/` hash differently. qbit-bridge does **not** normalize URLs (trailing slashes, query-param order, case in the path) because query-bearing feeds (dmhy and similar) are sensitive to exact form. Callers are responsible for using a consistent URL across subscriptions they intend to dedupe.
 
 Changing `feed_url` on an existing subscription via `qbit_subscribe` is rejected (`invalid_argument`). Unsubscribe and resubscribe instead — silent feed-path migration would orphan the old synthetic feed.
 
@@ -533,10 +537,10 @@ Removes the rule. The synthetic feed is removed too unless another subscription 
 - Retroactive retag of existing matched downloads — requires an `update_downloads` tool (also deferred). Forward-only retag on the rule itself is already supported via `qbit_subscribe`.
 - `match_rss_articles` — preview which feed items a rule matches. Useful for rule debugging; agents rarely need it.
 - `set_rss_settings` — global auto-download / processing toggles. Owner sets these in the qBittorrent UI.
-- Raw RSS folder-tree management — qbit-mcp synthesizes feed paths under `qbit-mcp-<hash>` (flat names, no folder). Other folders in qbit's RSS tree are left untouched but not navigable through this surface.
+- Raw RSS folder-tree management — qbit-bridge synthesizes feed paths under `qbit-bridge-<hash>` (flat names, no folder). Other folders in qbit's RSS tree are left untouched but not navigable through this surface.
 - `set_torrent_speed_limits`, `set_torrent_share_limit` — agent-uncommon power-user knobs.
 - `recheck`, `reannounce`, `set_force_start`, `set_super_seeding` — download-level toggles that complicate the v1 surface without a clear workflow story.
-- Download file upload (raw bytes) — magnet URIs cover the agentic flow we ship dmhy-mcp + qbit-mcp for.
+- Download file upload (raw bytes) — magnet URIs cover the agentic flow we ship dmhy-mcp + qbit-bridge for.
 - Tracker / peer / file management (`add_trackers`, `ban_peers`, `set_file_priority`, `rename_file`).
 - Search-plugin tools.
 
