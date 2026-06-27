@@ -4,7 +4,7 @@
   "description": "n8n nodes for qbit-bridge download workflows.",
   "keywords": ["n8n-community-node-package", "qbittorrent", "mcp"],
   "license": "MIT",
-  "packageManager": "pnpm@10.6.5",
+  "packageManager": "pnpm@10.34.4",
   "engines": {
     "node": ">=20.15"
   },
