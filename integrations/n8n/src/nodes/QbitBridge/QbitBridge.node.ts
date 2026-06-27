@@ -91,15 +91,6 @@ export class QbitBridge implements INodeType {
 				displayOptions: { show: { resource: ['download'], operation: ['get', 'remove'] } },
 			},
 			{
-				displayName: 'States',
-				name: 'states',
-				type: 'string',
-				default: '',
-				placeholder: 'downloading,seeding',
-				description: 'Comma-separated normalized state filters',
-				displayOptions: { show: { resource: ['download'], operation: ['list'] } },
-			},
-			{
 				displayName: 'Tags',
 				name: 'filterTags',
 				type: 'string',
@@ -252,7 +243,6 @@ function addBody(ctx: IExecuteFunctions, itemIndex: number): IDataObject {
 
 function listQuery(ctx: IExecuteFunctions): URLSearchParams {
 	const query = new URLSearchParams();
-	for (const state of csv(ctx.getNodeParameter('states', 0) as string)) query.append('states', state);
 	for (const tag of csv(ctx.getNodeParameter('filterTags', 0) as string)) query.append('tags', tag);
 	for (const hash of csv(ctx.getNodeParameter('hashes', 0) as string)) query.append('hashes', hash);
 	for (const field of ctx.getNodeParameter('includeFields', 0) as string[]) {
