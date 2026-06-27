@@ -14,8 +14,8 @@ export class QbitBridge implements INodeType {
 		displayName: 'qBit Bridge',
 		name: 'qbitBridge',
 		icon: {
-			light: 'file:qbittorrent-light.svg',
-			dark: 'file:qbittorrent-dark.svg',
+			light: 'file:qbittorrent-dark.svg',
+			dark: 'file:qbittorrent-light.svg',
 		},
 		group: ['transform'],
 		version: 1,

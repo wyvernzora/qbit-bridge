@@ -10,8 +10,8 @@ export class QbitBridgeApi implements ICredentialType {
 	displayName = 'qBit Bridge API';
 	documentationUrl = 'https://github.com/wyvernzora/qbit-bridge';
 	icon: Icon = {
-		light: 'file:qbittorrent-light.svg',
-		dark: 'file:qbittorrent-dark.svg',
+		light: 'file:qbittorrent-dark.svg',
+		dark: 'file:qbittorrent-light.svg',
 	};
 
 	properties: INodeProperties[] = [
