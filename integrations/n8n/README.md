@@ -11,11 +11,16 @@ docker pull ghcr.io/wyvernzora/qbit-bridge/n8n-nodes:latest
 
 | Node | What it does |
 | --- | --- |
-| qBittorrent | Resource **Download**, operations **Add**, **List**, **Get**, and **Remove**. |
+| qBit Bridge | Resource **Download**, operations **Add**, **List**, **Get**, and **Remove**. |
+| qBit Bridge Download Finished Trigger | Polls qbit-bridge for completed downloads and emits each hash at most once per lease window. |
 
 **Download -> List** emits each returned `downloads[]` row as its own n8n item.
 
 **Download -> Add/Get/Remove** operate one input item at a time.
+
+The download-finished trigger treats a job as complete when `completion_on > 0`
+or `progress >= 1`. Downstream removal of the qBittorrent job acts as the ack;
+if the job remains visible, it is emitted again after the lease expires.
 
 ## Development
 

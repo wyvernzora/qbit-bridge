@@ -23,7 +23,8 @@
       "dist/credentials/QbitBridgeApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/QbitBridge/QbitBridge.node.js"
+      "dist/nodes/QbitBridge/QbitBridge.node.js",
+      "dist/nodes/QbitBridge/QbitBridgeDownloadFinishedTrigger.node.js"
     ]
   },
   "peerDependencies": {
