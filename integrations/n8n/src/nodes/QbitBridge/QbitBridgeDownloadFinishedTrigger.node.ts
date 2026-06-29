@@ -44,6 +44,14 @@ export class QbitBridgeDownloadFinishedTrigger implements INodeType {
 				default: 5,
 				description: 'How long to suppress a completed download after emitting it',
 			},
+			{
+				displayName: 'Limit',
+				name: 'limit',
+				type: 'number',
+				typeOptions: { minValue: 1 },
+				default: 10,
+				description: 'Maximum completed downloads to emit per poll',
+			},
 		],
 	};
 
@@ -70,6 +78,7 @@ function callFactory(ctx: IPollFunctions, credentials: IDataObject): HTTPCall {
 async function pollCompletedDownloads(ctx: IPollFunctions, call: HTTPCall): Promise<INodeExecutionData[]> {
 	const now = Date.now();
 	const leaseMs = Math.max(1, ctx.getNodeParameter('leaseMinutes', 5) as number) * 60_000;
+	const limit = Math.max(1, ctx.getNodeParameter('limit', 10) as number);
 	const downloads = await listDownloads(ctx, call);
 	const completed = downloads.filter(isCompletedDownload);
 	const completedHashes = new Set(completed.map((download) => String(download.hash)));
@@ -81,6 +90,7 @@ async function pollCompletedDownloads(ctx: IPollFunctions, call: HTTPCall): Prom
 		if ((leases[hash] ?? 0) > now) continue;
 		leases[hash] = now + leaseMs;
 		out.push({ json: download });
+		if (out.length >= limit) break;
 	}
 
 	for (const hash of Object.keys(leases)) {
