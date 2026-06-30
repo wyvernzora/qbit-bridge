@@ -35,28 +35,24 @@ Smoke that the surface works at all.
 
 The interesting category. Catches description-clarity bugs and ordering misreads.
 
-- **B1 — subscribe to a series.** "Subscribe to https://dmhy.example/rss?id=12345 with tag tvdb:12345, save to kura-inbox." Expected: `qbit_subscribe` (no need to discover destination first — it's in the prompt). Failure mode: agent calls `qbit_list_destinations` first, wasting a tool call.
-- **B2 — subscribe with discovery.** "Subscribe to <url> and put it in whatever destination is for kura." Expected: `qbit_list_destinations` then `qbit_subscribe`. Failure mode: agent makes up `"kura"` or `"kura-inbox"` without checking.
-- **B3 — prune stalled.** "Remove every download that's been stalled for a while." Expected: `qbit_search_downloads` with `states=["stalled"]`, then `qbit_remove_downloads` with the resulting hash list. Failure mode: agent uses `filter` selector instead of explicit `hashes` (acceptable, but token-wasteful if the count is small).
-- **B4 — reverse-resolve.** Given a download with `save_path=/mnt/kura`, "What destination alias is this?" Expected: `qbit_list_destinations`. Failure mode: agent fabricates an alias name from the path.
+- **B1 — retag download.** "Mark this download as reviewed." Expected: `qbit_search_downloads` to identify the hash, then `qbit_update_download_tags` with explicit `hashes`. Failure mode: agent tries to filter inside the mutation tool.
+- **B2 — prune stalled.** "Remove every download that's been stalled for a while." Expected: `qbit_search_downloads` with `states=["stalled"]`, then `qbit_remove_downloads` with the resulting hash list. Failure mode: agent uses `filter` selector instead of explicit `hashes` (acceptable, but token-wasteful if the count is small).
+- **B3 — reverse-resolve.** Given a download with `save_path=/mnt/kura`, "What destination alias is this?" Expected: `qbit_list_destinations`. Failure mode: agent fabricates an alias name from the path.
 
 ### C. Idempotency / retry
 
 - **C1 — duplicate add.** "Add this magnet" (twice in sequence). Expected: both calls return `accepted=true`; second carries `already_existed=true`. Failure mode: agent pre-checks via `qbit_search_downloads` instead of just calling `qbit_add_download` again (the idempotency is in the description; if the agent doesn't trust it, the description is unclear).
-- **C2 — upsert subscription.** Subscribe with one tag set; then `qbit_subscribe` again with same name + same `feed_url` + different tags. Expected: rule replaced, no error. Failure mode: agent calls `qbit_unsubscribe` first.
-
 ### D. Error-path correctness
 
 - **D1 — upstream_forbidden.** Test qBittorrent has loopback-auth-bypass **off**. Expected: agent surfaces the operator-action message to the user; does NOT retry. Failure mode: agent retries indefinitely.
 - **D2 — invalid_argument on tag with comma.** "Add this magnet with tags ['weekly,active']." Expected: agent surfaces the validation message and asks the user to clarify (`weekly` and `active` as separate tags? or a literal `weekly,active`?). Failure mode: agent silently strips the comma.
-- **D3 — feed_url change rejected.** Subscribe with `feed_url=A`, then `qbit_subscribe` with same name + `feed_url=B`. Expected: agent calls `qbit_unsubscribe` then `qbit_subscribe` with B (per the description's "unsubscribe and resubscribe" guidance). Failure mode: agent retries with A.
 
 ### E. Filter + pagination
 
-Catches the new R1 affordances on `qbit_search_subscriptions`.
+Catches filtering and pagination affordances on `qbit_search_downloads`.
 
-- **E1 — name-glob filter.** With 50 subscriptions, "Show me my kura-* subscriptions." Expected: `qbit_search_subscriptions` with `name_glob="kura-*"`. Failure mode: fetch all + filter client-side (token waste).
-- **E2 — pagination.** With 250 subscriptions, "List all my subscriptions." Expected: agent paginates via `offset` until `has_more=false`. Failure mode: assumes the first page is everything.
+- **E1 — tag filter.** With 50 downloads, "Show me my tvdb-tagged downloads." Expected: `qbit_search_downloads` with `tags=["tvdb:*"]`. Failure mode: fetch all + filter client-side.
+- **E2 — pagination.** With 250 downloads, "List all my downloads." Expected: agent paginates via `offset` until `has_more=false`. Failure mode: assumes the first page is everything.
 
 ## Metrics
 
@@ -78,7 +74,7 @@ Read the transcripts. Numbers are necessary but not sufficient — the qualitati
 Initial targets — adjust once a baseline exists:
 
 - Pass rate ≥ 95% across all tasks at temperature=0.
-- Median tool-call count for A1 = 1; for B1 = 1; for B3 = 2.
+- Median tool-call count for A1 = 1; for B1 = 2; for B2 = 2.
 - Zero `Wasted calls` on category C (the idempotency contract is the whole point).
 - Description-clarity bugs surface only on B and D — A and C should be boring.
 
@@ -93,5 +89,4 @@ Initial targets — adjust once a baseline exists:
 ## Out of scope (for v1 of this eval)
 
 - Multi-server interaction (qbit-bridge + dmhy-mcp in the same session). Save for a cross-server eval suite once both surfaces stabilize.
-- Long-running tasks (subscribe → wait for match → confirm download added). Needs a clock-fast-forward shim on qBittorrent that doesn't exist.
 - Adversarial prompts (prompt injection through feed titles). Important but a different workstream — security review, not surface design.

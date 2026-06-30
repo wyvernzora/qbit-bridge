@@ -73,9 +73,7 @@ func errorFromSDK(err error) *ToolError {
 			Message:   msg,
 			Retriable: false,
 		}
-	case errors.Is(err, qbt.ErrTorrentNotFound),
-		errors.Is(err, qbt.ErrRSSItemNotFound),
-		errors.Is(err, qbt.ErrRSSRuleNotFound):
+	case errors.Is(err, qbt.ErrTorrentNotFound):
 		return &ToolError{
 			Code:      CodeUpstreamNotFound,
 			Message:   msg,
@@ -84,8 +82,7 @@ func errorFromSDK(err error) *ToolError {
 	case errors.Is(err, qbt.ErrInvalidTorrentHash),
 		errors.Is(err, qbt.ErrEmptyTorrentName),
 		errors.Is(err, qbt.ErrInvalidPriority),
-		errors.Is(err, qbt.ErrInvalidURL),
-		errors.Is(err, qbt.ErrRSSPathConflict):
+		errors.Is(err, qbt.ErrInvalidURL):
 		return &ToolError{
 			Code:      CodeInvalidArgument,
 			Message:   msg,

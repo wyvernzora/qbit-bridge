@@ -15,7 +15,7 @@ This file holds project-specific context, learnings, and overrides only. Rules i
 
 - **Name:** qbit-bridge.
 - **Domain:** qBittorrent automation bridge for MCP, REST, and n8n workflows.
-- **Tools:** Eight MCP tools across downloads, tags, destinations, and subscriptions (see `docs/tools.md`).
+- **Tools:** Six MCP tools across downloads, tags, and destinations (see `docs/tools.md`).
 - **Transports:** stdio (default), streamable HTTP (`--transport=http --addr=:8080`, MCP mounted at `/mcp`) plus REST downloads under `/api/v1/downloads`.
 - **Deployment:** sidecar to the qBittorrent container, reaching it over loopback. qBittorrent must have "Bypass authentication for clients on localhost" enabled — the MCP server performs no login.
 - **No auth, no web UI.** HTTP transport also exposes a small REST facade under `/api/v1` for n8n-style download workflows.

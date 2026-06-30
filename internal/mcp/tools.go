@@ -18,8 +18,8 @@ type internalHandler[I, O any] func(ctx context.Context, in I) (O, *ToolError)
 
 // Register adds all qBittorrent tools to the given server. The tool surface
 // is split by domain — see internal/mcp/tools_downloads.go,
-// internal/mcp/tools_tags.go, internal/mcp/tools_destinations.go, and
-// internal/mcp/tools_subscriptions.go for the per-domain registrations.
+// internal/mcp/tools_tags.go, and internal/mcp/tools_destinations.go
+// for the per-domain registrations.
 // docs/tools.md is the design spec for the whole surface.
 //
 // resolver is the deploy-time destination alias map; tool handlers that
@@ -29,7 +29,6 @@ func Register(s *mcpsdk.Server, client *qbt.Client, resolver *savepath.Resolver,
 	registerDownloads(s, client, resolver, logger)
 	registerTags(s, client, resolver, logger)
 	registerDestinations(s, client, resolver, logger)
-	registerSubscriptions(s, client, resolver, logger)
 }
 
 // wrap adapts an internalHandler into the SDK signature. It records logging
@@ -86,11 +85,10 @@ func readOnlyAnnotations() *mcpsdk.ToolAnnotations {
 }
 
 // mutatingAnnotations is the preset for tools that mutate qBittorrent
-// state (qbit_add_download, qbit_remove_downloads, qbit_subscribe,
-// qbit_unsubscribe). DestructiveHint is true only on the
-// actually-destructive ops (remove, unsubscribe); the rest are
-// non-destructive mutations. OpenWorldHint is false for the same reason
-// as the read-only preset — qBittorrent is the operator's own instance.
+// state. DestructiveHint is true only on the actually-destructive ops;
+// the rest are non-destructive mutations. OpenWorldHint is false for the
+// same reason as the read-only preset — qBittorrent is the operator's own
+// instance.
 //
 //nolint:unused // referenced by the per-domain registrars in tools_*.go
 func mutatingAnnotations(destructive bool) *mcpsdk.ToolAnnotations {
@@ -102,25 +100,4 @@ func mutatingAnnotations(destructive bool) *mcpsdk.ToolAnnotations {
 		IdempotentHint:  false,
 		OpenWorldHint:   &no,
 	}
-}
-
-// auditMutation emits a structured slog record for an agent-initiated
-// mutation so operators can investigate later. The "audit=true" field is
-// the grep-anchor; "action" is a short verb (add, remove). level
-// differentiates severity — remove fires at warn so log aggregators
-// filtering on level surface it more prominently, while reversible ops
-// sit at info.
-//
-// The call site fires *before* the upstream SDK call so the record reflects
-// agent intent even when upstream rejects the request. wrap's existing
-// timing log captures the upstream outcome separately.
-func auditMutation(ctx context.Context, logger *slog.Logger, level slog.Level, action string, hashes []string, extra ...slog.Attr) {
-	attrs := []slog.Attr{
-		slog.Bool("audit", true),
-		slog.String("action", action),
-		slog.Any("hashes", hashes),
-		slog.Int("count", len(hashes)),
-	}
-	attrs = append(attrs, extra...)
-	logger.LogAttrs(ctx, level, "tool audit", attrs...)
 }

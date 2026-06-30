@@ -49,7 +49,7 @@ func startTestSession(t *testing.T) (*mcpsdk.ClientSession, func()) { //nolint:g
 	return cs, cleanup
 }
 
-func TestListTools_All9Registered(t *testing.T) {
+func TestListTools_All6Registered(t *testing.T) {
 	cs, cleanup := startTestSession(t)
 	defer cleanup()
 	res, err := cs.ListTools(context.Background(), nil)
@@ -66,10 +66,6 @@ func TestListTools_All9Registered(t *testing.T) {
 		"qbit_list_tags": false,
 		// destinations (1)
 		"qbit_list_destinations": false,
-		// subscriptions (3)
-		"qbit_search_subscriptions": false,
-		"qbit_subscribe":            false,
-		"qbit_unsubscribe":          false,
 	}
 	for _, tool := range res.Tools {
 		if _, ok := want[tool.Name]; !ok {
