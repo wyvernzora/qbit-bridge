@@ -11,8 +11,9 @@ import (
 	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
-// registerDownloads wires the 3 download tools onto s:
-// qbit_search_downloads, qbit_add_download, qbit_remove_downloads.
+// registerDownloads wires the 4 download tools onto s:
+// qbit_search_downloads, qbit_add_download, qbit_remove_downloads,
+// qbit_update_download_tags.
 func registerDownloads(s *mcpsdk.Server, client *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger) {
 	service := downloads.New(client, resolver, logger)
 	destHint := resolver.DescriptionHint()
@@ -40,6 +41,14 @@ func registerDownloads(s *mcpsdk.Server, client *qbt.Client, resolver *savepath.
 			Annotations: mutatingAnnotations(true),
 		},
 		wrap("qbit_remove_downloads", logger, adaptDownload(service.Remove)),
+	)
+	mcpsdk.AddTool(s,
+		&mcpsdk.Tool{
+			Name:        "qbit_update_download_tags",
+			Description: "Add and/or remove literal tags on explicitly selected downloads. Pass hashes (required; [] is a no-op), add, and/or remove. Tag names are literal, not glob patterns, and must not contain commas.",
+			Annotations: mutatingAnnotations(false),
+		},
+		wrap("qbit_update_download_tags", logger, adaptDownload(service.UpdateTags)),
 	)
 }
 

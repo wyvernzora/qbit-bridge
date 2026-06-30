@@ -1,6 +1,6 @@
 # Tool surface
 
-Design spec for the MCP tools `qbit-bridge` exposes. Eight tools across four groups: downloads (3), tags (1), destinations (1), subscriptions (3).
+Design spec for the MCP tools `qbit-bridge` exposes. Nine tools across four groups: downloads (4), tags (1), destinations (1), subscriptions (3).
 
 Design priorities:
 
@@ -89,12 +89,12 @@ The `qbit_list_destinations` tool exposes the alias-to-root map so an agent can 
 
 ### Audit logging
 
-Every mutation tool (`qbit_add_download`, `qbit_remove_downloads`, `qbit_subscribe`, `qbit_unsubscribe`) emits a structured slog record **before** the upstream call so the action is visible even when upstream rejects the request. The records share a fixed shape:
+Every mutation tool (`qbit_add_download`, `qbit_remove_downloads`, `qbit_update_download_tags`, `qbit_subscribe`, `qbit_unsubscribe`) emits a structured slog record **before** the upstream call so the action is visible even when upstream rejects the request. The records share a fixed shape:
 
 ```
 msg=tool audit
 audit=true
-action=<verb>        ← add | remove | subscribe | unsubscribe
+action=<verb>        ← add | remove | tag | subscribe | unsubscribe
 hashes=[h1 h2 ...]   ← or [name] for subscription actions
 count=N
 [tool-specific extras]
@@ -106,6 +106,7 @@ Severity differentiates ops so log aggregators filtering on level can surface th
 |---|---|---|---|
 | `add` | `INFO` | `destination`, `tags`, `already_existed` | Reversible by `qbit_remove_downloads`. `already_existed=true|false` distinguishes the idempotent re-add (skipped upstream call) from a fresh add. |
 | `remove` | `WARN` | _(none)_ | Even without on-disk deletion, "qbit forgot this download" is the kind of event operators investigate when something downstream breaks. |
+| `tag` | `INFO` | `add`, `remove` | Reversible tag metadata patch on explicit hashes. |
 | `subscribe` | `INFO` | `feed_url`, `destination`, `tags` | Upsert; reversible by `qbit_unsubscribe`. |
 | `unsubscribe` | `WARN` | `feed_path` | Removes a rule (and possibly an orphan feed). |
 
@@ -321,6 +322,31 @@ Filter accepts `states` and `tags` (same semantics as `qbit_search_downloads`; t
 }
 ```
 
+### `qbit_update_download_tags`
+
+Add and/or remove literal tags on explicitly selected download hashes.
+
+**Input:**
+
+```json
+{
+  "hashes": ["aabbcc..."],
+  "add": ["kura:reviewed"],
+  "remove": ["weekly"]
+}
+```
+
+`hashes` is required. An explicitly-empty `hashes: []` is a no-op success with no upstream call. At least one of `add` or `remove` must be non-empty. Tag names are literal, not glob patterns, and must not contain commas.
+
+**Output:**
+
+```json
+{
+  "affected_count": 1,
+  "affected_hashes": ["aabbcc..."]
+}
+```
+
 ---
 
 ## Tag tools
@@ -526,7 +552,7 @@ Removes the rule. The synthetic feed is removed too unless another subscription 
 
 ## Deferred to follow-ups (not in v1)
 
-- `update_downloads` — mid-life metadata edits (destination, tags, name). Dropped because everything is set at `qbit_add_download` time; metadata churn isn't an agent workflow. Re-add as one commit if a real need surfaces.
+- `update_downloads` — broader mid-life metadata edits (destination, name). Dropped because everything is set at `qbit_add_download` time; metadata churn isn't an agent workflow. Tags are covered by `qbit_update_download_tags`.
 - `pause_downloads` / `resume_downloads` — operator concern (maintenance windows, bandwidth scheduling), not agent workflow. Re-add if a workflow surfaces.
 - `get_download` — folded into `qbit_search_downloads` via `include_fields=["all", "trackers", "files"]` with a single-hash query.
 - `recheck_torrents` — rare workflow; add when there is demand.
@@ -552,7 +578,7 @@ These all map cleanly onto the established `internalHandler` + `wrap` pattern; a
 
 | Component | Approx tokens |
 |---|---|
-| Tool list (8 names + descriptions) loaded per turn | 0.7k – 0.9k |
+| Tool list (9 names + descriptions) loaded per turn | 0.8k – 1.0k |
 | `qbit_search_downloads` default response, 50 downloads | 3.5k – 4.5k |
 | `qbit_search_downloads` default response, 10 downloads | 0.7k – 1.0k |
 | `qbit_search_downloads` single-hash with `include_fields=["all"]` (no trackers/files) | 0.3k |

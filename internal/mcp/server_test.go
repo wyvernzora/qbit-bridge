@@ -49,7 +49,7 @@ func startTestSession(t *testing.T) (*mcpsdk.ClientSession, func()) { //nolint:g
 	return cs, cleanup
 }
 
-func TestListTools_All8Registered(t *testing.T) {
+func TestListTools_All9Registered(t *testing.T) {
 	cs, cleanup := startTestSession(t)
 	defer cleanup()
 	res, err := cs.ListTools(context.Background(), nil)
@@ -57,10 +57,11 @@ func TestListTools_All8Registered(t *testing.T) {
 		t.Fatalf("ListTools: %v", err)
 	}
 	want := map[string]bool{
-		// downloads (3)
-		"qbit_search_downloads": false,
-		"qbit_add_download":     false,
-		"qbit_remove_downloads": false,
+		// downloads (4)
+		"qbit_search_downloads":     false,
+		"qbit_add_download":         false,
+		"qbit_remove_downloads":     false,
+		"qbit_update_download_tags": false,
 		// tags (1)
 		"qbit_list_tags": false,
 		// destinations (1)

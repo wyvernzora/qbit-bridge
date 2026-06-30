@@ -162,6 +162,12 @@ func callRemoveDownloads(t *testing.T, client *qbt.Client, in RemoveDownloadsInp
 	return h(context.Background(), in)
 }
 
+func callUpdateDownloadTags(t *testing.T, client *qbt.Client, in UpdateDownloadTagsInput) (AffectedOutput, *ToolError) {
+	t.Helper()
+	h := updateDownloadTagsHandler(client, discardLogger())
+	return h(context.Background(), in)
+}
+
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
@@ -1116,6 +1122,136 @@ func TestRemoveDownloads_NoOnDiskDeletion(t *testing.T) {
 	}
 	if captured["/api/v2/torrents/delete"].PostForm.Get("deleteFiles") != "false" {
 		t.Errorf("deleteFiles form = %q, want false (on-disk delete should never be exposed)", captured["/api/v2/torrents/delete"].PostForm.Get("deleteFiles"))
+	}
+}
+
+// --- update_download_tags ---
+
+func updateTagRoutes() map[string]mockRoute {
+	return map[string]mockRoute{
+		"/api/v2/torrents/addTags":    {body: ""},
+		"/api/v2/torrents/removeTags": {body: ""},
+	}
+}
+
+func TestUpdateDownloadTags_AddAndRemove(t *testing.T) {
+	client, captured := newQbitMockRoutes(t, updateTagRoutes())
+	out, terr := callUpdateDownloadTags(t, client, UpdateDownloadTagsInput{
+		Hashes: []string{"aaa", "bbb"},
+		Add:    []string{"kura:reviewed"},
+		Remove: []string{"weekly"},
+	})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	if out.AffectedCount != 2 {
+		t.Errorf("affected_count = %d, want 2", out.AffectedCount)
+	}
+	if captured["/api/v2/torrents/addTags"].PostForm.Get("hashes") != "aaa|bbb" {
+		t.Errorf("add hashes form = %q", captured["/api/v2/torrents/addTags"].PostForm.Get("hashes"))
+	}
+	if captured["/api/v2/torrents/addTags"].PostForm.Get("tags") != "kura:reviewed" {
+		t.Errorf("add tags form = %q", captured["/api/v2/torrents/addTags"].PostForm.Get("tags"))
+	}
+	if captured["/api/v2/torrents/removeTags"].PostForm.Get("hashes") != "aaa|bbb" {
+		t.Errorf("remove hashes form = %q", captured["/api/v2/torrents/removeTags"].PostForm.Get("hashes"))
+	}
+	if captured["/api/v2/torrents/removeTags"].PostForm.Get("tags") != "weekly" {
+		t.Errorf("remove tags form = %q", captured["/api/v2/torrents/removeTags"].PostForm.Get("tags"))
+	}
+}
+
+func TestUpdateDownloadTags_AddOnlySkipsRemoveCall(t *testing.T) {
+	client, captured := newQbitMockRoutes(t, updateTagRoutes())
+	_, terr := callUpdateDownloadTags(t, client, UpdateDownloadTagsInput{
+		Hashes: []string{"aaa"},
+		Add:    []string{"kura:reviewed"},
+	})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	if captured["/api/v2/torrents/removeTags"].Method != "" {
+		t.Error("removeTags should not be called when remove is empty")
+	}
+}
+
+func TestUpdateDownloadTags_EmptyHashesIsNoOpSuccess(t *testing.T) {
+	client, captured := newQbitMockRoutes(t, updateTagRoutes())
+	out, terr := callUpdateDownloadTags(t, client, UpdateDownloadTagsInput{
+		Hashes: []string{},
+		Add:    []string{"kura:reviewed"},
+	})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	if out.AffectedCount != 0 {
+		t.Errorf("affected_count = %d, want 0", out.AffectedCount)
+	}
+	if captured["/api/v2/torrents/addTags"].Method != "" || captured["/api/v2/torrents/removeTags"].Method != "" {
+		t.Error("upstream should not be called for empty hashes")
+	}
+}
+
+func TestUpdateDownloadTags_HashesRequired(t *testing.T) {
+	client, _ := newQbitMockRoutes(t, updateTagRoutes())
+	_, terr := callUpdateDownloadTags(t, client, UpdateDownloadTagsInput{Add: []string{"kura:reviewed"}})
+	if terr == nil || terr.Code != CodeInvalidArgument {
+		t.Errorf("err = %+v, want invalid_argument", terr)
+	}
+}
+
+func TestUpdateDownloadTags_RequiresAddOrRemove(t *testing.T) {
+	client, _ := newQbitMockRoutes(t, updateTagRoutes())
+	_, terr := callUpdateDownloadTags(t, client, UpdateDownloadTagsInput{Hashes: []string{"aaa"}})
+	if terr == nil || terr.Code != CodeInvalidArgument {
+		t.Errorf("err = %+v, want invalid_argument", terr)
+	}
+}
+
+func TestUpdateDownloadTags_TagWithCommaRejected(t *testing.T) {
+	client, captured := newQbitMockRoutes(t, updateTagRoutes())
+	_, terr := callUpdateDownloadTags(t, client, UpdateDownloadTagsInput{
+		Hashes: []string{"aaa"},
+		Add:    []string{"bad,tag"},
+	})
+	if terr == nil || terr.Code != CodeInvalidArgument {
+		t.Errorf("err = %+v, want invalid_argument", terr)
+	}
+	if captured["/api/v2/torrents/addTags"].Method != "" {
+		t.Error("upstream should not be called")
+	}
+}
+
+func TestUpdateDownloadTags_Upstream500IsUnavailable(t *testing.T) {
+	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
+		"/api/v2/torrents/addTags": {status: http.StatusInternalServerError},
+	})
+	_, terr := callUpdateDownloadTags(t, client, UpdateDownloadTagsInput{
+		Hashes: []string{"aaa"},
+		Add:    []string{"kura:reviewed"},
+	})
+	if terr == nil || terr.Code != CodeUpstreamUnavailable {
+		t.Errorf("err = %+v, want upstream_unavailable", terr)
+	}
+}
+
+func TestAuditLog_UpdateTagsEmitsInfoRecord(t *testing.T) {
+	buf, logger := bufferedLogger()
+	client, _ := newQbitMockRoutes(t, updateTagRoutes())
+	h := updateDownloadTagsHandler(client, logger)
+	_, terr := h(context.Background(), UpdateDownloadTagsInput{
+		Hashes: []string{"aaa"},
+		Add:    []string{"kura:reviewed"},
+		Remove: []string{"weekly"},
+	})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	got := buf.String()
+	for _, want := range []string{"audit=true", "action=tag", "level=INFO", "aaa", "kura:reviewed", "weekly"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("audit log missing %q in %q", want, got)
+		}
 	}
 }
 
