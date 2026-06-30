@@ -24,7 +24,7 @@ HTTP transport also exposes a small REST facade for n8n-style workflows. See [`d
 | Method | Path | What |
 | --- | --- | --- |
 | `POST` | `/api/v1/downloads` | Add one magnet download. |
-| `GET` | `/api/v1/downloads` | List downloads; filter with repeated `states`, `tags`, and `hashes` query params. |
+| `GET` | `/api/v1/downloads` | List downloads; filter with repeated `states`, `tags`, `not_tags`, and `hashes` query params. |
 | `GET` | `/api/v1/downloads/{hash}` | Get one download. |
 | `DELETE` | `/api/v1/downloads/{hash}` | Remove one download from qBittorrent tracking; files are not deleted. |
 

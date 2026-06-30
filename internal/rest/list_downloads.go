@@ -26,6 +26,7 @@ func searchInputFromQuery(r *http.Request) (downloads.SearchDownloadsInput, *dow
 	q := r.URL.Query()
 	in := downloads.SearchDownloadsInput{
 		Tags:          q["tags"],
+		NotTags:       q["not_tags"],
 		Hashes:        q["hashes"],
 		Sort:          q.Get("sort"),
 		IncludeFields: q["include_fields"],

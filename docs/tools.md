@@ -111,7 +111,7 @@ Operators investigating "what did the agent do" can `grep audit=true` on the str
 
 ### Tag-pattern matching
 
-`tags` filter fields on `search_downloads` and `remove_downloads.filter` accept shell-style globs using Go's `path.Match` syntax:
+`tags` and `not_tags` filter fields on `search_downloads`, plus `tags` on `remove_downloads.filter`, accept shell-style globs using Go's `path.Match` syntax:
 
 | Pattern token | Matches |
 |---|---|
@@ -121,7 +121,7 @@ Operators investigating "what did the agent do" can `grep audit=true` on the str
 | `[a-z]` | any character in the range |
 | plain string | exact tag name |
 
-OR semantics across the patterns list — a download is included if any pattern matches any of its tags.
+OR semantics across each patterns list. `tags` includes a download if any pattern matches any tag; `not_tags` excludes a download if any pattern matches any tag.
 
 Use case: dmhy-mcp tags downloads it adds with `tvdb:<series-id>`. `search_downloads` with `tags: ["tvdb:*"]` returns every kura-related job. `tags: ["tvdb:12345", "tvdb:67890"]` returns just those two series (literal match).
 
@@ -188,6 +188,7 @@ Primary read. Filtered, sorted, paginated.
 {
   "states": ["downloading", "stalled"],   // optional; OR semantics
   "tags": ["tvdb:*", "weekly"],            // optional; OR; shell-style globs (path.Match)
+  "not_tags": ["adopt:review"],            // optional; exclude matching tag globs
   "hashes": ["aabbcc..."],                 // optional; exact set
   "sort": "added_on_desc",                 // see enum below; default added_on_desc
   "limit": 50,                             // default 50, max 200
@@ -197,6 +198,8 @@ Primary read. Filtered, sorted, paginated.
 ```
 
 `states` accepts the eight normalized values listed above, **case-insensitively** — `"Downloading"`, `"DOWNLOADING"`, and `"downloading"` all pass. Unknown states return `invalid_argument`.
+
+`not_tags` uses the same glob syntax as `tags`; a download is excluded if any of its tags match any `not_tags` pattern. Tagless downloads are included when only `not_tags` is set.
 
 `sort` enum: `name_asc`, `name_desc`, `added_on_asc`, `added_on_desc` (default), `size_asc`, `size_desc`, `progress_asc`, `progress_desc`, `dlspeed_desc`, `eta_asc`, `ratio_desc`.
 

@@ -37,6 +37,14 @@ export class QbitBridgeDownloadFinishedTrigger implements INodeType {
 				description: 'Comma-separated tag patterns using Go path.Match glob syntax',
 			},
 			{
+				displayName: 'Not Tags',
+				name: 'notTags',
+				type: 'string',
+				default: '',
+				placeholder: 'review,adopt:blocked',
+				description: 'Comma-separated tag patterns to exclude',
+			},
+			{
 				displayName: 'Lease Minutes',
 				name: 'leaseMinutes',
 				type: 'number',
@@ -115,6 +123,7 @@ async function listDownloads(ctx: IPollFunctions, call: HTTPCall): Promise<IData
 function listQuery(ctx: IPollFunctions, offset: number): URLSearchParams {
 	const query = new URLSearchParams();
 	for (const tag of csv(ctx.getNodeParameter('filterTags', '') as string)) query.append('tags', tag);
+	for (const tag of csv(ctx.getNodeParameter('notTags', '') as string)) query.append('not_tags', tag);
 	query.append('include_fields', 'completion_on');
 	query.set('limit', String(pageLimit));
 	query.set('offset', String(offset));

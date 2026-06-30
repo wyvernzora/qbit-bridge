@@ -517,6 +517,31 @@ func TestSearchDownloads_TagUnion(t *testing.T) {
 	}
 }
 
+func TestSearchDownloads_NotTagsExcludesMatches(t *testing.T) {
+	client, _ := newQbitMock(t, fixture6Downloads)
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{
+		Tags:    []string{"tvdb:*"},
+		NotTags: []string{"complete"},
+	})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	if out.Count != 2 {
+		t.Errorf("count = %d, want 2", out.Count)
+	}
+}
+
+func TestSearchDownloads_NotTagsIncludesTaglessDownloads(t *testing.T) {
+	client, _ := newQbitMock(t, fixture6Downloads)
+	out, terr := callSearchDownloads(t, client, SearchDownloadsInput{NotTags: []string{"weekly"}})
+	if terr != nil {
+		t.Fatalf("err = %+v", terr)
+	}
+	if out.Count != 4 {
+		t.Errorf("count = %d, want 4", out.Count)
+	}
+}
+
 func TestSearchDownloads_HashesPassedToUpstream(t *testing.T) {
 	client, cap := newQbitMock(t, fixture6Downloads)
 	_, _ = callSearchDownloads(t, client, SearchDownloadsInput{Hashes: []string{"aaa", "bbb"}})
@@ -596,6 +621,14 @@ func TestSearchDownloads_RejectsUnknownSort(t *testing.T) {
 func TestSearchDownloads_RejectsMalformedTagPattern(t *testing.T) {
 	client, _ := newQbitMock(t, fixture6Downloads)
 	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{Tags: []string{"tvdb:[unclosed"}})
+	if terr == nil || terr.Code != CodeInvalidArgument {
+		t.Fatalf("err = %+v", terr)
+	}
+}
+
+func TestSearchDownloads_RejectsMalformedNotTagPattern(t *testing.T) {
+	client, _ := newQbitMock(t, fixture6Downloads)
+	_, terr := callSearchDownloads(t, client, SearchDownloadsInput{NotTags: []string{"tvdb:[unclosed"}})
 	if terr == nil || terr.Code != CodeInvalidArgument {
 		t.Fatalf("err = %+v", terr)
 	}

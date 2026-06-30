@@ -49,6 +49,7 @@ List downloads. Query parameters:
 | --- | --- | --- |
 | `states` | yes | Normalized states: `downloading`, `seeding`, `paused`, `stalled`, `queued`, `checking`, `errored`, `unknown` |
 | `tags` | yes | Tag patterns using Go `path.Match` glob syntax, e.g. `tvdb:*` |
+| `not_tags` | yes | Exclude downloads matching any tag pattern, same syntax as `tags` |
 | `hashes` | yes | Exact hash set |
 | `sort` | no | Same values as `search_downloads`, default `added_on_desc` |
 | `limit` | no | Default `50`, max `200` |

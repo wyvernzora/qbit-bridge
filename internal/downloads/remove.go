@@ -67,7 +67,7 @@ func resolveTargets(ctx context.Context, client *qbt.Client, sel HashesOrFilter)
 	if err != nil {
 		return nil, errorFromSDK(err)
 	}
-	filtered, terr := filterDownloads(downloads, sel.Filter.States, sel.Filter.Tags)
+	filtered, terr := filterDownloads(downloads, sel.Filter.States, sel.Filter.Tags, nil)
 	if terr != nil {
 		return nil, terr
 	}

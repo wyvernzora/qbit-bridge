@@ -14,7 +14,8 @@ import (
 type SearchDownloadsInput struct {
 	States        []NormalizedState `json:"states,omitempty" jsonschema:"optional state filter; OR semantics across the array. one of downloading, seeding, paused, stalled, queued, checking, errored, unknown"`
 	Tags          []string          `json:"tags,omitempty" jsonschema:"tag-pattern filter; OR semantics. each entry is a shell-style glob (path.Match: *, ?, [abc]); plain strings match exactly. example: ['tvdb:*'] finds every download tagged tvdb:NNNNN."`
-	Hashes        []string          `json:"hashes,omitempty" jsonschema:"explicit set of hashes to return. when combined with states/tags, hashes are pre-filtered upstream and states/tags further restrict the result (AND semantics)."`
+	NotTags       []string          `json:"not_tags,omitempty" jsonschema:"negative tag-pattern filter; OR semantics. excludes downloads where any tag matches any pattern. same glob syntax as tags."`
+	Hashes        []string          `json:"hashes,omitempty" jsonschema:"explicit set of hashes to return. when combined with states/tags/not_tags, hashes are pre-filtered upstream and local filters further restrict the result (AND semantics)."`
 	Sort          string            `json:"sort,omitempty" jsonschema:"sort order; one of name_asc, name_desc, added_on_asc, added_on_desc (default), size_asc, size_desc, progress_asc, progress_desc, dlspeed_desc, eta_asc, ratio_desc"`
 	Limit         int               `json:"limit,omitempty" jsonschema:"max downloads to return; default 50, max 200"`
 	Offset        int               `json:"offset,omitempty" jsonschema:"page offset; default 0"`
@@ -57,7 +58,7 @@ func searchDownloadsHandler(client *qbt.Client, resolver *savepath.Resolver) int
 			return empty, errorFromSDK(err)
 		}
 
-		filtered, terr := filterDownloads(downloads, in.States, in.Tags)
+		filtered, terr := filterDownloads(downloads, in.States, in.Tags, in.NotTags)
 		if terr != nil {
 			return empty, terr
 		}
@@ -107,6 +108,9 @@ func prepareSearchDownloads(in SearchDownloadsInput) (searchDownloadsRequest, *T
 	if terr := validateTagPatterns(in.Tags); terr != nil {
 		return searchDownloadsRequest{}, terr
 	}
+	if terr := validateTagPatterns(in.NotTags); terr != nil {
+		return searchDownloadsRequest{}, terr
+	}
 	includeSet, terr := resolveIncludeFields(in.IncludeFields)
 	if terr != nil {
 		return searchDownloadsRequest{}, terr
@@ -122,7 +126,7 @@ func prepareSearchDownloads(in SearchDownloadsInput) (searchDownloadsRequest, *T
 // filterDownloads applies the state-set and tag-glob filters that the qbit
 // API cannot express natively. Tag patterns are assumed pre-validated by
 // validateTagPatterns; a re-failure here is treated as an internal error.
-func filterDownloads(downloads []qbt.Torrent, states []NormalizedState, tagPatterns []string) ([]qbt.Torrent, *ToolError) {
+func filterDownloads(downloads []qbt.Torrent, states []NormalizedState, tagPatterns, notTagPatterns []string) ([]qbt.Torrent, *ToolError) {
 	stateSet := make(map[NormalizedState]bool, len(states))
 	for _, s := range states {
 		stateSet[s] = true
@@ -133,11 +137,21 @@ func filterDownloads(downloads []qbt.Torrent, states []NormalizedState, tagPatte
 			continue
 		}
 		if len(tagPatterns) > 0 {
-			ok, err := matchAnyTag(tagPatterns, splitTags(t.Tags))
+			tags := splitTags(t.Tags)
+			ok, err := matchAnyTag(tagPatterns, tags)
 			if err != nil {
 				return nil, &ToolError{Code: CodeInternal, Message: err.Error(), Retriable: false}
 			}
 			if !ok {
+				continue
+			}
+		}
+		if len(notTagPatterns) > 0 {
+			ok, err := matchAnyTag(notTagPatterns, splitTags(t.Tags))
+			if err != nil {
+				return nil, &ToolError{Code: CodeInternal, Message: err.Error(), Retriable: false}
+			}
+			if ok {
 				continue
 			}
 		}

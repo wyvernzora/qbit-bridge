@@ -187,6 +187,35 @@ func TestListDownloads(t *testing.T) {
 	}
 }
 
+func TestListDownloads_NotTags(t *testing.T) {
+	hs, _ := startRESTTestServer(t, map[string]mockRoute{
+		"/api/v2/torrents/info": {body: fixture6Downloads},
+	}, "")
+	defer hs.Close()
+
+	resp, err := http.Get(hs.URL + DownloadsPath + "?states=downloading&tags=tvdb:*&not_tags=weekly")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	out := decodeREST[downloads.SearchDownloadsOutput](t, resp)
+	if out.Count != 1 {
+		t.Fatalf("count = %d, want 1", out.Count)
+	}
+	got := map[string]downloads.Download{}
+	for _, d := range out.Downloads {
+		got[d.Hash] = d
+	}
+	if got["fff"].Hash != "fff" {
+		t.Errorf("downloads = %+v, want fff", got)
+	}
+	if _, ok := got["aaa"]; ok {
+		t.Error("weekly download aaa should be filtered out by not_tags")
+	}
+}
+
 func TestGetDownload(t *testing.T) {
 	hs, captured := startRESTTestServer(t, map[string]mockRoute{
 		"/api/v2/torrents/info": {body: fixture1Download},

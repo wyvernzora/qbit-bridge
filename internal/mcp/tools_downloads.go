@@ -21,7 +21,7 @@ func registerDownloads(s *mcpsdk.Server, client *qbt.Client, resolver *savepath.
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
 			Name:        "search_downloads",
-			Description: "Search downloads with filtering, sorting, and pagination. Default projection is lean (hash, name, state, progress, sizes, speeds, eta, ratio, tags, added_on). Use include_fields to opt into richer fields: save_path, content_path, magnet_uri, peer/seed counts, total bytes, seeding_time, private. The special value include_fields=[\"all\"] expands every field-level key (but not trackers/files). The trackers and files keys trigger one additional upstream call per result hash — response size scales with len(hashes) * per-torrent fan-out, so opt in deliberately. Default limit 50, max 200; paginate via offset.",
+			Description: "Search downloads with filtering, sorting, and pagination. Use tags to include tag globs and not_tags to exclude tag globs. Default projection is lean (hash, name, state, progress, sizes, speeds, eta, ratio, tags, added_on). Use include_fields to opt into richer fields: save_path, content_path, magnet_uri, peer/seed counts, total bytes, seeding_time, private. The special value include_fields=[\"all\"] expands every field-level key (but not trackers/files). The trackers and files keys trigger one additional upstream call per result hash — response size scales with len(hashes) * per-torrent fan-out, so opt in deliberately. Default limit 50, max 200; paginate via offset.",
 			Annotations: readOnlyAnnotations(),
 		},
 		wrap("search_downloads", logger, adaptDownload(service.Search)),
