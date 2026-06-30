@@ -18,15 +18,15 @@ import (
 func registerDestinations(s *mcpsdk.Server, _ *qbt.Client, resolver *savepath.Resolver, logger *slog.Logger) {
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
-			Name:        "qbit_list_destinations",
-			Description: "List the deploy-time-configured save destinations. Each entry is an alias name (used as the `destination` value on qbit_add_download) paired with the absolute filesystem path it resolves to. Agents that observed a raw save_path on a Download output can reverse-look it up here to find the matching alias name. The list is fixed for the lifetime of the qbit-bridge process; restart with a different --save-paths to change it.",
+			Name:        "list_destinations",
+			Description: "List the deploy-time-configured save destinations. Each entry is an alias name (used as the `destination` value on add_download) paired with the absolute filesystem path it resolves to. Agents that observed a raw save_path on a Download output can reverse-look it up here to find the matching alias name. The list is fixed for the lifetime of the qbit-bridge process; restart with a different --save-paths to change it.",
 			Annotations: readOnlyAnnotations(),
 		},
-		wrap("qbit_list_destinations", logger, listDestinationsHandler(resolver)),
+		wrap("list_destinations", logger, listDestinationsHandler(resolver)),
 	)
 }
 
-// --- qbit_list_destinations ---
+// --- list_destinations ---
 
 // ListDestinationsInput has no fields because destinations are deploy-time configuration.
 type ListDestinationsInput struct{}

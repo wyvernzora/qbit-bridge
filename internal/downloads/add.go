@@ -14,7 +14,7 @@ import (
 	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
-// --- qbit_add_download ---
+// --- add_download ---
 
 // AddDownloadInput describes a magnet add request.
 type AddDownloadInput struct {

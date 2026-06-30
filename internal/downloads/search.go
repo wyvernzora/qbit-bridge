@@ -8,7 +8,7 @@ import (
 	"github.com/wyvernzora/qbit-bridge/internal/savepath"
 )
 
-// --- qbit_search_downloads ---
+// --- search_downloads ---
 
 // SearchDownloadsInput filters, sorts, paginates, and projects downloads.
 type SearchDownloadsInput struct {

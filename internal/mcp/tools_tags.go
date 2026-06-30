@@ -18,15 +18,15 @@ import (
 func registerTags(s *mcpsdk.Server, client *qbt.Client, _ *savepath.Resolver, logger *slog.Logger) {
 	mcpsdk.AddTool(s,
 		&mcpsdk.Tool{
-			Name:        "qbit_list_tags",
-			Description: "List all tags configured in qBittorrent. Use before qbit_add_download to discover existing tag names; passing an unknown tag to qbit_add_download.tags auto-creates it.",
+			Name:        "list_tags",
+			Description: "List all tags configured in qBittorrent. Use before add_download to discover existing tag names; passing an unknown tag to add_download.tags auto-creates it.",
 			Annotations: readOnlyAnnotations(),
 		},
-		wrap("qbit_list_tags", logger, listTagsHandler(client)),
+		wrap("list_tags", logger, listTagsHandler(client)),
 	)
 }
 
-// --- qbit_list_tags ---
+// --- list_tags ---
 
 type ListTagsInput struct{}
 

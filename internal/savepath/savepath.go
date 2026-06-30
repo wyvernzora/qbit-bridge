@@ -1,7 +1,7 @@
 // Package savepath maps deploy-time-configured destination aliases to
 // filesystem paths.
 //
-// MCP tools that accept a save-path input (qbit_add_download) take an
+// MCP tools that accept a save-path input (add_download) take an
 // alias name — "kura-inbox", "downloads" — or
 // an alias-prefixed form "<alias>:<relpath>" to target a subdirectory
 // under the alias root. The operator declares the alias→path mapping

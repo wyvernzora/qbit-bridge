@@ -68,7 +68,7 @@ func errorResult(te *ToolError) *mcpsdk.CallToolResult {
 }
 
 // readOnlyAnnotations is the ToolAnnotations preset used by every
-// read-only tool (qbit_search_*, qbit_list_*). qBittorrent is the
+// read-only tool. qBittorrent is the
 // operator's own instance — closed-world per the MCP spec's example
 // framing (your-DB rather than open-internet). Reads are idempotent and
 // never mutate.

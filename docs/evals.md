@@ -27,21 +27,21 @@ Five categories. Each task lives in `evals/tasks/<id>.json` (or .yaml — pick o
 
 Smoke that the surface works at all.
 
-- **A1 — list-the-thing.** "Show me what I'm currently downloading." Expected: `qbit_search_downloads` with no args, lean projection.
-- **A2 — list tags.** "What tags do I have configured?" Expected: `qbit_list_tags`.
-- **A3 — list destinations.** "Where can I save downloads?" Expected: `qbit_list_destinations`.
+- **A1 — list-the-thing.** "Show me what I'm currently downloading." Expected: `search_downloads` with no args, lean projection.
+- **A2 — list tags.** "What tags do I have configured?" Expected: `list_tags`.
+- **A3 — list destinations.** "Where can I save downloads?" Expected: `list_destinations`.
 
 ### B. Multi-step workflow
 
 The interesting category. Catches description-clarity bugs and ordering misreads.
 
-- **B1 — retag download.** "Mark this download as reviewed." Expected: `qbit_search_downloads` to identify the hash, then `qbit_update_download_tags` with explicit `hashes`. Failure mode: agent tries to filter inside the mutation tool.
-- **B2 — prune stalled.** "Remove every download that's been stalled for a while." Expected: `qbit_search_downloads` with `states=["stalled"]`, then `qbit_remove_downloads` with the resulting hash list. Failure mode: agent uses `filter` selector instead of explicit `hashes` (acceptable, but token-wasteful if the count is small).
-- **B3 — reverse-resolve.** Given a download with `save_path=/mnt/kura`, "What destination alias is this?" Expected: `qbit_list_destinations`. Failure mode: agent fabricates an alias name from the path.
+- **B1 — retag download.** "Mark this download as reviewed." Expected: `search_downloads` to identify the hash, then `update_download_tags` with explicit `hashes`. Failure mode: agent tries to filter inside the mutation tool.
+- **B2 — prune stalled.** "Remove every download that's been stalled for a while." Expected: `search_downloads` with `states=["stalled"]`, then `remove_downloads` with the resulting hash list. Failure mode: agent uses `filter` selector instead of explicit `hashes` (acceptable, but token-wasteful if the count is small).
+- **B3 — reverse-resolve.** Given a download with `save_path=/mnt/kura`, "What destination alias is this?" Expected: `list_destinations`. Failure mode: agent fabricates an alias name from the path.
 
 ### C. Idempotency / retry
 
-- **C1 — duplicate add.** "Add this magnet" (twice in sequence). Expected: both calls return `accepted=true`; second carries `already_existed=true`. Failure mode: agent pre-checks via `qbit_search_downloads` instead of just calling `qbit_add_download` again (the idempotency is in the description; if the agent doesn't trust it, the description is unclear).
+- **C1 — duplicate add.** "Add this magnet" (twice in sequence). Expected: both calls return `accepted=true`; second carries `already_existed=true`. Failure mode: agent pre-checks via `search_downloads` instead of just calling `add_download` again (the idempotency is in the description; if the agent doesn't trust it, the description is unclear).
 ### D. Error-path correctness
 
 - **D1 — upstream_forbidden.** Test qBittorrent has loopback-auth-bypass **off**. Expected: agent surfaces the operator-action message to the user; does NOT retry. Failure mode: agent retries indefinitely.
@@ -49,9 +49,9 @@ The interesting category. Catches description-clarity bugs and ordering misreads
 
 ### E. Filter + pagination
 
-Catches filtering and pagination affordances on `qbit_search_downloads`.
+Catches filtering and pagination affordances on `search_downloads`.
 
-- **E1 — tag filter.** With 50 downloads, "Show me my tvdb-tagged downloads." Expected: `qbit_search_downloads` with `tags=["tvdb:*"]`. Failure mode: fetch all + filter client-side.
+- **E1 — tag filter.** With 50 downloads, "Show me my tvdb-tagged downloads." Expected: `search_downloads` with `tags=["tvdb:*"]`. Failure mode: fetch all + filter client-side.
 - **E2 — pagination.** With 250 downloads, "List all my downloads." Expected: agent paginates via `offset` until `has_more=false`. Failure mode: assumes the first page is everything.
 
 ## Metrics
@@ -62,7 +62,7 @@ Per Anthropic's guidance, track per task:
 | --- | --- |
 | **Pass/fail** | Final state matches the assertion. |
 | **Tool calls** | Total invocations. Lower is better when the task is simple. |
-| **Wasted calls** | Calls the spec marks unnecessary (e.g., a pre-check before an idempotent `qbit_add_download`). |
+| **Wasted calls** | Calls the spec marks unnecessary (e.g., a pre-check before an idempotent `add_download`). |
 | **Tokens (in/out)** | Input tokens (mostly tool descriptions + transcript) and output tokens. |
 | **Wall-clock** | End-to-end duration. |
 | **Error rate** | Fraction of attempts that fail across N seeds (try ≥3 seeds per task). |

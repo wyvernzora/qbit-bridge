@@ -8,16 +8,14 @@ Designed to run as a sidecar to the qBittorrent container, reaching the daemon o
 
 Six tools across three groups (see [`docs/tools.md`](docs/tools.md) for the full schema spec).
 
-All tools carry the `qbit_` prefix so generic verbs don't collide with other MCP servers in the same agent session.
-
 | Group | Tool | What |
 | --- | --- | --- |
-| Downloads | `qbit_search_downloads` | Filtered/sorted/paginated download list with opt-in field projection (incl. per-hash `trackers` / `files`). |
-| Downloads | `qbit_add_download` | Magnet-only add. Idempotent — re-adding a hash already known to qBittorrent leaves the live download untouched and reports `already_existed: true`. |
-| Downloads | `qbit_remove_downloads` | Bulk remove by explicit `hashes` or by `filter` (states/tags). On-disk files are never deleted by this tool. |
-| Downloads | `qbit_update_download_tags` | Add and/or remove literal tags on explicitly selected download hashes. |
-| Tags | `qbit_list_tags` | List the configured tags. Unknown tags auto-create on `qbit_add_download.tags`. |
-| Destinations | `qbit_list_destinations` | List the deploy-time-configured save-path aliases (name → absolute path). Useful for reverse-lookups from a raw `save_path` to an alias name. |
+| Downloads | `search_downloads` | Filtered/sorted/paginated download list with opt-in field projection (incl. per-hash `trackers` / `files`). |
+| Downloads | `add_download` | Magnet-only add. Idempotent — re-adding a hash already known to qBittorrent leaves the live download untouched and reports `already_existed: true`. |
+| Downloads | `remove_downloads` | Bulk remove by explicit `hashes` or by `filter` (states/tags). On-disk files are never deleted by this tool. |
+| Downloads | `update_download_tags` | Add and/or remove literal tags on explicitly selected download hashes. |
+| Tags | `list_tags` | List the configured tags. Unknown tags auto-create on `add_download.tags`. |
+| Destinations | `list_destinations` | List the deploy-time-configured save-path aliases (name → absolute path). Useful for reverse-lookups from a raw `save_path` to an alias name. |
 
 ## REST API
 
@@ -44,7 +42,7 @@ corepack pnpm build
 
 ### Destination aliases
 
-Tools that direct download storage (`qbit_add_download`) **do not accept arbitrary filesystem paths**. The operator declares aliases at boot via `--save-paths` (or `QBITTORRENT_SAVE_PATHS`):
+Tools that direct download storage (`add_download`) **do not accept arbitrary filesystem paths**. The operator declares aliases at boot via `--save-paths` (or `QBITTORRENT_SAVE_PATHS`):
 
 ```
 --save-paths='kura-inbox=/mnt/kura,downloads=/mnt/downloads'

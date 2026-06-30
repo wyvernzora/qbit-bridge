@@ -7,7 +7,7 @@ import (
 	qbt "github.com/autobrr/go-qbittorrent"
 )
 
-// --- qbit_remove_downloads ---
+// --- remove_downloads ---
 
 // HashesOrFilter is the bulk-op selector: pass either Hashes or Filter,
 // never both, never neither. resolveTargets returns invalid_argument when

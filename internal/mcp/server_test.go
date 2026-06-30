@@ -58,14 +58,14 @@ func TestListTools_All6Registered(t *testing.T) {
 	}
 	want := map[string]bool{
 		// downloads (4)
-		"qbit_search_downloads":     false,
-		"qbit_add_download":         false,
-		"qbit_remove_downloads":     false,
-		"qbit_update_download_tags": false,
+		"search_downloads":     false,
+		"add_download":         false,
+		"remove_downloads":     false,
+		"update_download_tags": false,
 		// tags (1)
-		"qbit_list_tags": false,
+		"list_tags": false,
 		// destinations (1)
-		"qbit_list_destinations": false,
+		"list_destinations": false,
 	}
 	for _, tool := range res.Tools {
 		if _, ok := want[tool.Name]; !ok {
@@ -97,7 +97,7 @@ func TestCallTool_UpstreamUnreachableReturnsIsError(t *testing.T) {
 	cs, cleanup := startTestSession(t)
 	defer cleanup()
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
-		Name:      "qbit_search_downloads",
+		Name:      "search_downloads",
 		Arguments: map[string]any{},
 	})
 	if err != nil {

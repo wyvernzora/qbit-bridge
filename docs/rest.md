@@ -50,10 +50,10 @@ List downloads. Query parameters:
 | `states` | yes | Normalized states: `downloading`, `seeding`, `paused`, `stalled`, `queued`, `checking`, `errored`, `unknown` |
 | `tags` | yes | Tag patterns using Go `path.Match` glob syntax, e.g. `tvdb:*` |
 | `hashes` | yes | Exact hash set |
-| `sort` | no | Same values as `qbit_search_downloads`, default `added_on_desc` |
+| `sort` | no | Same values as `search_downloads`, default `added_on_desc` |
 | `limit` | no | Default `50`, max `200` |
 | `offset` | no | Default `0` |
-| `include_fields` | yes | Same projection keys as `qbit_search_downloads` |
+| `include_fields` | yes | Same projection keys as `search_downloads` |
 
 Response:
 
