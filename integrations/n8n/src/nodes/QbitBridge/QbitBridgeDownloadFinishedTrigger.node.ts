@@ -20,7 +20,7 @@ export class QbitBridgeDownloadFinishedTrigger implements INodeType {
 		},
 		group: ['trigger'],
 		version: 1,
-		subtitle: '={{"tags: " + ($parameter["filterTags"] || "any")}}',
+		subtitle: '={{"tags: " + ($parameter["filterTags"] || "any") + ($parameter["notTags"] ? ", not: " + $parameter["notTags"] : "")}}',
 		description: 'Emit completed qbit-bridge downloads with a retry lease',
 		defaults: { name: 'qBit Bridge Download Finished Trigger' },
 		polling: true,
@@ -122,8 +122,8 @@ async function listDownloads(ctx: IPollFunctions, call: HTTPCall): Promise<IData
 
 function listQuery(ctx: IPollFunctions, offset: number): URLSearchParams {
 	const query = new URLSearchParams();
-	for (const tag of csv(ctx.getNodeParameter('filterTags', '') as string)) query.append('tags', tag);
-	for (const tag of csv(ctx.getNodeParameter('notTags', '') as string)) query.append('not_tags', tag);
+	for (const tag of csv(ctx.getNodeParameter('filterTags', ''))) query.append('tags', tag);
+	for (const tag of csv(ctx.getNodeParameter('notTags', ''))) query.append('not_tags', tag);
 	query.append('include_fields', 'completion_on');
 	query.set('limit', String(pageLimit));
 	query.set('offset', String(offset));
@@ -139,9 +139,10 @@ function leaseTable(staticData: IDataObject): Record<string, number> {
 	return staticData.leases as Record<string, number>;
 }
 
-function csv(value: string): string[] {
-	return value
-		.split(',')
+function csv(value: unknown): string[] {
+	const values = Array.isArray(value) ? value : [value];
+	return values
+		.flatMap((part) => String(part ?? '').split(','))
 		.map((part) => part.trim())
 		.filter((part) => part !== '');
 }
