@@ -41,8 +41,9 @@ type capturedReq struct {
 }
 
 type mockRoute struct {
-	status int
-	body   string
+	status      int
+	body        string
+	contentType string
 }
 
 func startRESTTestServer(t *testing.T, routes map[string]mockRoute, resolverSpec string) (server *httptest.Server, captured map[string]*capturedReq) {
@@ -82,7 +83,11 @@ func newQbitMockRoutes(t *testing.T, routes map[string]mockRoute) (client *qbt.C
 			w.WriteHeader(route.status)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
+		contentType := route.contentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		w.Header().Set("Content-Type", contentType)
 		_, _ = w.Write([]byte(route.body))
 	}))
 	t.Cleanup(srv.Close)
@@ -96,7 +101,7 @@ func discardLogger() *slog.Logger {
 func addRouteOK() map[string]mockRoute {
 	return map[string]mockRoute{
 		"/api/v2/torrents/info": {body: `[]`},
-		"/api/v2/torrents/add":  {body: "Ok."},
+		"/api/v2/torrents/add":  {body: "Ok.", contentType: "text/plain"},
 	}
 }
 
