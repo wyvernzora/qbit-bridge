@@ -87,7 +87,7 @@ func addDownloadHandler(client *qbt.Client, resolver *savepath.Resolver, logger 
 			opts["rename"] = in.Rename
 		}
 
-		if err := client.AddTorrentFromUrlCtx(ctx, in.Magnet, opts); err != nil {
+		if _, err := client.AddTorrentFromUrlCtx(ctx, in.Magnet, opts); err != nil {
 			return empty, errorFromSDK(err)
 		}
 		return AddDownloadOutput{Hash: hash, Accepted: true, AlreadyExisted: false}, nil

@@ -97,8 +97,9 @@ func newQbitMockStatus(t *testing.T, status int) *qbt.Client {
 }
 
 type mockRoute struct {
-	status int
-	body   string
+	status      int
+	body        string
+	contentType string
 }
 
 func newQbitMockRoutes(t *testing.T, routes map[string]mockRoute) (client *qbt.Client, captured map[string]*capturedReq) {
@@ -119,7 +120,11 @@ func newQbitMockRoutes(t *testing.T, routes map[string]mockRoute) (client *qbt.C
 			w.WriteHeader(route.status)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
+		contentType := route.contentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		w.Header().Set("Content-Type", contentType)
 		_, _ = w.Write([]byte(route.body))
 	}))
 	t.Cleanup(srv.Close)
@@ -761,7 +766,7 @@ const (
 func addRouteOK() map[string]mockRoute {
 	return map[string]mockRoute{
 		"/api/v2/torrents/info": {body: "[]"},
-		"/api/v2/torrents/add":  {body: "Ok."},
+		"/api/v2/torrents/add":  {body: "Ok.", contentType: "text/plain"},
 	}
 }
 
@@ -951,7 +956,7 @@ func TestAddDownload_IdempotentSkipsUpstreamWhenHashPresent(t *testing.T) {
 	existing := `[{"hash":"` + validMagnetHash + `","name":"prior","state":"downloading"}]`
 	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/torrents/info": {body: existing},
-		"/api/v2/torrents/add":  {body: "Ok."},
+		"/api/v2/torrents/add":  {body: "Ok.", contentType: "text/plain"},
 	})
 	out, terr := callAddDownload(t, client, mustResolver(t, ""), AddDownloadInput{Magnet: validMagnet})
 	if terr != nil {
@@ -975,7 +980,7 @@ func TestAddDownload_IdempotentAuditLogsAlreadyExisted(t *testing.T) {
 	existing := `[{"hash":"` + validMagnetHash + `","name":"prior","state":"downloading"}]`
 	client, _ := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/torrents/info": {body: existing},
-		"/api/v2/torrents/add":  {body: "Ok."},
+		"/api/v2/torrents/add":  {body: "Ok.", contentType: "text/plain"},
 	})
 	buf, logger := bufferedLogger()
 	h := addDownloadHandler(client, mustResolver(t, ""), logger)
@@ -996,7 +1001,7 @@ func TestAddDownload_PreCheckUpstreamErrorPropagates(t *testing.T) {
 	// occur, and the handler must surface upstream_unavailable.
 	client, captured := newQbitMockRoutes(t, map[string]mockRoute{
 		"/api/v2/torrents/info": {status: http.StatusInternalServerError},
-		"/api/v2/torrents/add":  {body: "Ok."},
+		"/api/v2/torrents/add":  {body: "Ok.", contentType: "text/plain"},
 	})
 	_, terr := callAddDownload(t, client, mustResolver(t, ""), AddDownloadInput{Magnet: validMagnet})
 	if terr == nil || terr.Code != CodeUpstreamUnavailable {
