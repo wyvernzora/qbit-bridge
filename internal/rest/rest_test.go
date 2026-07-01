@@ -107,6 +107,13 @@ func removeRoutes() map[string]mockRoute {
 	}
 }
 
+func updateTagRoutes() map[string]mockRoute {
+	return map[string]mockRoute{
+		"/api/v2/torrents/addTags":    {body: ""},
+		"/api/v2/torrents/removeTags": {body: ""},
+	}
+}
+
 func decodeREST[T any](t *testing.T, resp *http.Response) T {
 	t.Helper()
 	defer resp.Body.Close()
@@ -284,6 +291,84 @@ func TestRemoveDownload(t *testing.T) {
 	}
 	if captured["/api/v2/torrents/delete"].PostForm.Get("deleteFiles") != "false" {
 		t.Errorf("deleteFiles = %q, want false", captured["/api/v2/torrents/delete"].PostForm.Get("deleteFiles"))
+	}
+}
+
+func TestUpdateDownloadTags(t *testing.T) {
+	hs, captured := startRESTTestServer(t, updateTagRoutes(), "")
+	defer hs.Close()
+
+	body := []byte(`{"add":["require-review"],"remove":["auto-adopt"]}`)
+	req, err := http.NewRequest(http.MethodPut, hs.URL+downloadsPathSlash+"aaa/tags", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	out := decodeREST[downloads.AffectedOutput](t, resp)
+	if out.AffectedCount != 1 || len(out.AffectedHashes) != 1 || out.AffectedHashes[0] != "aaa" {
+		t.Errorf("out = %+v", out)
+	}
+	if captured["/api/v2/torrents/addTags"].PostForm.Get("hashes") != "aaa" {
+		t.Errorf("add hashes = %q, want aaa", captured["/api/v2/torrents/addTags"].PostForm.Get("hashes"))
+	}
+	if captured["/api/v2/torrents/addTags"].PostForm.Get("tags") != "require-review" {
+		t.Errorf("add tags = %q, want require-review", captured["/api/v2/torrents/addTags"].PostForm.Get("tags"))
+	}
+	if captured["/api/v2/torrents/removeTags"].PostForm.Get("hashes") != "aaa" {
+		t.Errorf("remove hashes = %q, want aaa", captured["/api/v2/torrents/removeTags"].PostForm.Get("hashes"))
+	}
+	if captured["/api/v2/torrents/removeTags"].PostForm.Get("tags") != "auto-adopt" {
+		t.Errorf("remove tags = %q, want auto-adopt", captured["/api/v2/torrents/removeTags"].PostForm.Get("tags"))
+	}
+}
+
+func TestUpdateDownloadTagsRejectsUnknownField(t *testing.T) {
+	hs, captured := startRESTTestServer(t, updateTagRoutes(), "")
+	defer hs.Close()
+
+	req, err := http.NewRequest(http.MethodPut, hs.URL+downloadsPathSlash+"aaa/tags", bytes.NewReader([]byte(`{"hashes":["bbb"],"add":["tag"]}`)))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	out := decodeREST[downloads.ToolError](t, resp)
+	if out.Code != downloads.CodeInvalidArgument {
+		t.Errorf("code = %q, want %q", out.Code, downloads.CodeInvalidArgument)
+	}
+	if captured["/api/v2/torrents/addTags"].Method != "" || captured["/api/v2/torrents/removeTags"].Method != "" {
+		t.Error("upstream tag update should not be called on bad JSON")
+	}
+}
+
+func TestUpdateDownloadTagsMethodNotAllowed(t *testing.T) {
+	hs, captured := startRESTTestServer(t, updateTagRoutes(), "")
+	defer hs.Close()
+
+	resp, err := http.Get(hs.URL + downloadsPathSlash + "aaa/tags")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", resp.StatusCode)
+	}
+	if resp.Header.Get("Allow") != "PUT" {
+		t.Errorf("allow = %q, want PUT", resp.Header.Get("Allow"))
+	}
+	if captured["/api/v2/torrents/addTags"].Method != "" || captured["/api/v2/torrents/removeTags"].Method != "" {
+		t.Error("upstream tag update should not be called on wrong method")
 	}
 }
 

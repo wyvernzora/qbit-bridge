@@ -45,6 +45,7 @@ export class QbitBridge implements INodeType {
 					{ name: 'Get', value: 'get', action: 'Get a download' },
 					{ name: 'List', value: 'list', action: 'List downloads' },
 					{ name: 'Remove', value: 'remove', action: 'Remove a download' },
+					{ name: 'Update Tags', value: 'updateTags', action: 'Update download tags' },
 				],
 				default: 'list',
 			},
@@ -58,12 +59,20 @@ export class QbitBridge implements INodeType {
 				displayOptions: { show: { resource: ['download'], operation: ['add'] } },
 			},
 			{
-				displayName: 'Tags',
+				displayName: 'Add Tags',
 				name: 'addTags',
 				type: 'string',
 				default: '={{$json.tags}}',
-				description: 'Comma-separated tags to apply on add',
-				displayOptions: { show: { resource: ['download'], operation: ['add'] } },
+				description: 'Comma-separated tags to add',
+				displayOptions: { show: { resource: ['download'], operation: ['add', 'updateTags'] } },
+			},
+			{
+				displayName: 'Remove Tags',
+				name: 'removeTags',
+				type: 'string',
+				default: '={{$json.removeTags}}',
+				description: 'Comma-separated tags to remove',
+				displayOptions: { show: { resource: ['download'], operation: ['updateTags'] } },
 			},
 			{
 				displayName: 'Destination',
@@ -88,7 +97,7 @@ export class QbitBridge implements INodeType {
 				default: '={{$json.hash}}',
 				required: true,
 				description: 'Download hash',
-				displayOptions: { show: { resource: ['download'], operation: ['get', 'remove'] } },
+				displayOptions: { show: { resource: ['download'], operation: ['get', 'remove', 'updateTags'] } },
 			},
 			{
 				displayName: 'Tags',
@@ -214,6 +223,12 @@ export class QbitBridge implements INodeType {
 					continue;
 				}
 
+				if (operation === 'updateTags') {
+					const result = await call('PUT', `/api/v1/downloads/${encodeURIComponent(hash)}/tags`, updateTagsBody(this, i));
+					out.push({ json: result, pairedItem: { item: i } });
+					continue;
+				}
+
 				const result = await call('DELETE', `/api/v1/downloads/${encodeURIComponent(hash)}`);
 				out.push({ json: result, pairedItem: { item: i } });
 			} catch (error) {
@@ -247,6 +262,13 @@ function addBody(ctx: IExecuteFunctions, itemIndex: number): IDataObject {
 		tags: csv(ctx.getNodeParameter('addTags', itemIndex)),
 		destination: ctx.getNodeParameter('destination', itemIndex),
 		rename: ctx.getNodeParameter('rename', itemIndex),
+	});
+}
+
+function updateTagsBody(ctx: IExecuteFunctions, itemIndex: number): IDataObject {
+	return dropEmpty({
+		add: csv(ctx.getNodeParameter('addTags', itemIndex)),
+		remove: csv(ctx.getNodeParameter('removeTags', itemIndex)),
 	});
 }
 

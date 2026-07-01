@@ -11,6 +11,7 @@ const (
 	// DownloadsPath is the collection route for download list/create operations.
 	DownloadsPath       = "/api/v1/downloads"
 	downloadsPathSlash  = "/api/v1/downloads/"
+	tagsPathSuffix      = "/tags"
 	errDownloadNotFound = "download not found"
 )
 
@@ -38,6 +39,20 @@ func (api api) downloadsRoute(w http.ResponseWriter, r *http.Request) {
 
 func (api api) downloadRoute(w http.ResponseWriter, r *http.Request) {
 	hash := strings.TrimPrefix(r.URL.Path, downloadsPathSlash)
+	if strings.HasSuffix(hash, tagsPathSuffix) {
+		hash = strings.TrimSuffix(hash, tagsPathSuffix)
+		if hash == "" || strings.Contains(hash, "/") {
+			writeToolError(w, &downloads.ToolError{Code: downloads.CodeInvalidArgument, Message: "hash is required", Retriable: false})
+			return
+		}
+		if r.Method != http.MethodPut {
+			methodNotAllowed(w, http.MethodPut)
+			return
+		}
+		api.updateDownloadTags(w, r, hash)
+		return
+	}
+
 	if hash == "" || strings.Contains(hash, "/") {
 		writeToolError(w, &downloads.ToolError{Code: downloads.CodeInvalidArgument, Message: "hash is required", Retriable: false})
 		return

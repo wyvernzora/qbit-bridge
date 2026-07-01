@@ -11,12 +11,12 @@ docker pull ghcr.io/wyvernzora/qbit-bridge/n8n-nodes:latest
 
 | Node | What it does |
 | --- | --- |
-| qBit Bridge | Resource **Download**, operations **Add**, **List**, **Get**, and **Remove**. |
+| qBit Bridge | Resource **Download**, operations **Add**, **List**, **Get**, **Remove**, and **Update Tags**. |
 | qBit Bridge Download Finished Trigger | Polls qbit-bridge for completed downloads and emits each hash at most once per lease window. |
 
 **Download -> List** emits each returned `downloads[]` row as its own n8n item. It supports tag include/exclude filters via **Tags** and **Not Tags**.
 
-**Download -> Add/Get/Remove** operate one input item at a time.
+**Download -> Add/Get/Remove/Update Tags** operate one input item at a time.
 
 The download-finished trigger treats a job as complete when `completion_on > 0`
 or `progress >= 1`, with the same **Tags** and **Not Tags** filters. Downstream
@@ -30,5 +30,6 @@ and `content_path`, and omits transient progress/speed/ETA fields.
 corepack enable
 corepack pnpm install --frozen-lockfile
 corepack pnpm typecheck
+corepack pnpm test
 corepack pnpm build
 ```

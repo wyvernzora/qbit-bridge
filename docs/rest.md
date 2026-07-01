@@ -99,6 +99,26 @@ Response:
 }
 ```
 
+### `PUT /api/v1/downloads/{hash}/tags`
+
+Add and/or remove literal tags on one download.
+
+```json
+{
+  "add": ["require-review"],
+  "remove": ["auto-adopt"]
+}
+```
+
+Response:
+
+```json
+{
+  "affected_count": 1,
+  "affected_hashes": ["deadbeef..."]
+}
+```
+
 ## n8n usage
 
 n8n should call one item at a time:
@@ -107,3 +127,4 @@ n8n should call one item at a time:
 - List node: call `GET /api/v1/downloads`, then emit each `downloads[]` entry as an n8n item.
 - Get node: one hash to `GET /api/v1/downloads/{hash}`.
 - Remove node: one hash to `DELETE /api/v1/downloads/{hash}`.
+- Update Tags node: one hash to `PUT /api/v1/downloads/{hash}/tags`.

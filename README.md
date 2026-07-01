@@ -27,12 +27,13 @@ HTTP transport also exposes a small REST facade for n8n-style workflows. See [`d
 | `GET` | `/api/v1/downloads` | List downloads; filter with repeated `states`, `tags`, `not_tags`, and `hashes` query params. |
 | `GET` | `/api/v1/downloads/{hash}` | Get one download. |
 | `DELETE` | `/api/v1/downloads/{hash}` | Remove one download from qBittorrent tracking; files are not deleted. |
+| `PUT` | `/api/v1/downloads/{hash}/tags` | Add and/or remove tags on one download. |
 
 ## n8n nodes
 
 The `integrations/n8n` package exports a community node for the REST facade. It
 ships the **qBittorrent** node with Download **Add**, **List**, **Get**, and
-**Remove** operations, plus a `qBit Bridge API` credential.
+**Remove**, and **Update Tags** operations, plus a `qBit Bridge API` credential.
 
 ```sh
 cd integrations/n8n
