@@ -21,7 +21,8 @@ docker pull ghcr.io/wyvernzora/qbit-bridge/n8n-nodes:latest
 The download-finished trigger treats a job as complete when `completion_on > 0`
 or `progress >= 1`, with the same **Tags** and **Not Tags** filters. Downstream
 removal of the qBittorrent job acts as the ack; if the job remains visible, it
-is emitted again after the lease expires.
+is emitted again after the lease expires. Trigger output includes `save_path`
+and `content_path`, and omits transient progress/speed/ETA fields.
 
 ## Development
 

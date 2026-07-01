@@ -97,7 +97,7 @@ async function pollCompletedDownloads(ctx: IPollFunctions, call: HTTPCall): Prom
 		const hash = String(download.hash);
 		if ((leases[hash] ?? 0) > now) continue;
 		leases[hash] = now + leaseMs;
-		out.push({ json: download });
+		out.push({ json: triggerOutput(download) });
 		if (out.length >= limit) break;
 	}
 
@@ -125,6 +125,8 @@ function listQuery(ctx: IPollFunctions, offset: number): URLSearchParams {
 	for (const tag of csv(ctx.getNodeParameter('filterTags', ''))) query.append('tags', tag);
 	for (const tag of csv(ctx.getNodeParameter('notTags', ''))) query.append('not_tags', tag);
 	query.append('include_fields', 'completion_on');
+	query.append('include_fields', 'save_path');
+	query.append('include_fields', 'content_path');
 	query.set('limit', String(pageLimit));
 	query.set('offset', String(offset));
 	return query;
@@ -132,6 +134,18 @@ function listQuery(ctx: IPollFunctions, offset: number): URLSearchParams {
 
 function isCompletedDownload(download: IDataObject): boolean {
 	return Number(download.completion_on ?? 0) > 0 || Number(download.progress ?? 0) >= 1;
+}
+
+function triggerOutput(download: IDataObject): IDataObject {
+	const out = { ...download };
+	delete out.state;
+	delete out.progress;
+	delete out.dlspeed;
+	delete out.dlspeed_bytes_per_sec;
+	delete out.upspeed;
+	delete out.upspeed_bytes_per_sec;
+	delete out.eta_seconds;
+	return out;
 }
 
 function leaseTable(staticData: IDataObject): Record<string, number> {
