@@ -3,7 +3,7 @@ module github.com/wyvernzora/qbit-bridge
 go 1.25.0
 
 require (
-	github.com/autobrr/go-qbittorrent v1.16.0
+	github.com/autobrr/go-qbittorrent v1.18.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 )
 
@@ -17,8 +17,8 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 )
